@@ -1,4 +1,5 @@
 import { canonicalItemUuid } from "./compendium-matcher.mjs";
+import { isAbilityScoreFeat } from "./feats.mjs";
 
 // Selection data only: all changes are still applied by native advancements.
 export const choiceName = value => String(value ?? "").normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
@@ -211,19 +212,19 @@ export async function prefillTraitSelection(flow, context) {
   return { data: { chosen: keys }, missing };
 }
 
-export function abilitySelection(advancement, scope) {
+export function abilitySelection(advancement, scope, { attributed = false } = {}) {
   // Class ASIs need per-level attribution, not a sum of all historical increases.
-  if (scope.kind === "class") return null;
+  if (scope.kind === "class" && !attributed) return null;
   const siblings = advancement.item.advancement?.byType?.AbilityScoreImprovement ?? [];
-  if (siblings.length > 1) return null;
+  if (siblings.length > 1 && !attributed) return null;
   const assignments = {};
   const seen = new Set();
   for (const modifier of scope.modifiers) {
     if (modifier.type !== "bonus" || !modifier.subType?.endsWith("-score")) continue;
     const key = abilityKeys[modifier.subType.slice(0, -6)];
-    const identity = `${modifier.componentTypeId}:${modifier.componentId}:${modifier.subType}:${modifier.value}`;
-    if (!key || seen.has(identity)) continue;
-    seen.add(identity);
+    const identity = modifier.id == null ? null : `${modifier.componentTypeId}:${modifier.componentId}:${modifier.id}`;
+    if (!key || (identity && seen.has(identity))) continue;
+    if (identity) seen.add(identity);
     if (!Number.isInteger(modifier.value) || modifier.value < 0) return null;
     assignments[key] = (assignments[key] ?? 0) + modifier.value;
   }
@@ -255,8 +256,25 @@ async function itemChoiceSelection(advancement, level, scope, context) {
   const selected = [];
   for (const name of names) {
     let candidates = context.entries.filter(entry => (config.type ? entry.type === config.type : ["feat", "subclass"].includes(entry.type)) && sameName(entry.name, name));
-    const preferred = candidates.filter(entry => pool.has(canonicalItemUuid(entry.uuid)));
-    if (preferred.length || !config.allowDrops) candidates = preferred;
+    if (!candidates.some(entry => pool.has(canonicalItemUuid(entry.uuid))) && scope.group === "race") {
+      // DDB appends ancestry labels such as "(Hill Giant)". Only accept the
+      // unqualified name from the selected species' authored native pool.
+      const unqualified = name.match(/^(.+?)\s*\([^()]+\)$/)?.[1];
+      if (unqualified) {
+        const aliases = context.entries.filter(entry => entry.type === "feat"
+          && pool.has(canonicalItemUuid(entry.uuid)) && sameName(entry.name, unqualified));
+        if (aliases.length) candidates = aliases;
+      }
+    }
+    const explicit = (context.featTasks ?? []).filter(task => task.selectedUuid && sameName(task.name, name));
+    if (explicit.length > 1) return null;
+    if (explicit.length === 1) {
+      candidates = candidates.filter(entry => canonicalItemUuid(entry.uuid) === canonicalItemUuid(explicit[0].selectedUuid)
+        && (config.allowDrops || pool.has(canonicalItemUuid(entry.uuid))));
+    } else {
+      const preferred = candidates.filter(entry => pool.has(canonicalItemUuid(entry.uuid)));
+      if (preferred.length || !config.allowDrops) candidates = preferred;
+    }
     if (config.type === "subclass") candidates = candidates.filter(entry => context.tasks.some(task => task.type === "subclass" && canonicalItemUuid(task.uuid) === canonicalItemUuid(entry.uuid)));
     const eligible = [];
     for (const entry of candidates) {
@@ -280,10 +298,39 @@ async function itemChoiceSelection(advancement, level, scope, context) {
   return unique.length === counts.max ? { selected: unique } : null;
 }
 
+async function classAbilitySelection(flow, context) {
+  const advancement = flow.advancement;
+  const cls = context.character.classes.filter(cls => sameName(cls.definition?.name, advancement.item.name));
+  if (cls.length !== 1) return null;
+  const features = definitions(cls[0].definition.classFeatures).filter(feature => feature.requiredLevel === flow.level
+    && /ability\s*score\s*improvement|epic\s*boon/i.test(feature.name ?? ""));
+  const featureIds = new Set(features.map(feature => feature.id));
+  const feats = (context.character.feats ?? []).filter(feat => feat?.definition && featureIds.has(feat.componentId));
+  if (feats.length !== 1) return null;
+  const feat = feats[0];
+  // Repeated definitions can aggregate modifiers from several levels; do not guess.
+  if (context.character.feats.filter(entry => entry?.definition?.id === feat.definition.id).length !== 1) return null;
+  if (isAbilityScoreFeat(feat.definition.name)) {
+    const modifiers = (context.character.modifiers?.feat ?? []).filter(modifier => modifier?.componentId === feat.definition.id);
+    return abilitySelection(advancement, { kind: "attributed-class", modifiers }, { attributed: true });
+  }
+  if (!advancement.allowFeat) return null;
+  const chosen = (context.featTasks ?? []).filter(task => task.definitionId === feat.definition.id && task.componentId === feat.componentId);
+  if (chosen.length !== 1 || !chosen[0].source) return null;
+  const source = chosen[0].source;
+  if (source.type !== "feat" || !source.testUserPermission(context.user, "OBSERVER")) return null;
+  try {
+    const valid = source.system.assertPrerequisites?.(advancement.actor, { level: advancement.actor.system.details.level, throwError: true });
+    if (valid !== undefined && valid !== true) return null;
+  } catch { return null; }
+  return { type: "feat", uuid: chosen[0].selectedUuid };
+}
+
 /** The caller falls back to native fixed grants or a manual prompt if this returns null. */
 export async function selectAdvancement(flow, context) {
   const advancement = flow.advancement;
   const type = advancement.type;
+  if (type === "AbilityScoreImprovement" && advancement.item.type === "class") return classAbilitySelection(flow, context);
   if (type === "HitPoints") {
     if (!Number.isInteger(flow.level) || flow.level < 1) return null;
     const previous = advancement.value?.toObject?.() ?? { ...advancement.value };
@@ -329,6 +376,6 @@ export async function describeSelection(flow, data, context) {
     const entry = context.entries.find(entry => entry.uuid === uuid);
     return entry ? `${entry.name} (${entry.packLabel})` : "Selected source item";
   }).join(", ");
-  if (data.uuid) return context.tasks.find(task => task.uuid === data.uuid)?.name ?? "Selected subclass source.";
+  if (data.uuid) return [...context.tasks, ...(context.featTasks ?? [])].find(task => task.uuid === data.uuid || task.selectedUuid === data.uuid)?.name ?? "Selected source item.";
   return "JSON selection applied.";
 }

@@ -3,6 +3,7 @@ import { accessibleItemPacks, worldSourceItemPacks, characterOrigins, indexOrigi
 import { baseActorData, prepareActorPlan, applyNativeSource, buildActor } from "./actor-builder.mjs";
 import { jsonSelectionInventory } from "./advancement-choices.mjs";
 import { characterLoadout, matchLoadout, prepareLoadoutPlan, importLoadout } from "./loadout.mjs";
+import { characterFeats, importFeats } from "./feats.mjs";
 
 export class CharacterSourceWindow extends foundry.applications.api.ApplicationV2 {
   static DEFAULT_OPTIONS = {
@@ -51,15 +52,20 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
         <p><button type="button" data-match-origins>Find character matches</button></p>
         <p data-match-status role="status" aria-live="polite"></p>
         <div data-match-results></div>
+        <h3>Feats</h3>
+        <p>Class-level feats are applied through native class advancements. Existing background and class grants are retained. Select sources for other feats below, or leave unresolved for review.</p>
+        <div data-feat-results></div>
         <h3>Equipment and spells</h3>
         <p>Choose source entries below. Unresolved equipment and spells are skipped and reported; they do not block character creation. Existing native spell grants are retained. Special casting resources require their granting source feature.</p>
         <div data-loadout-results></div>
         <hr>
-        <p>Create a new actor from the selected sources. Compatible JSON choices and fixed source grants fill native advancements automatically. HP uses the first-level maximum and averages thereafter, without rolling. Selected equipment and class spells import after advancements. Unmatched choices, ability overrides, and other bonuses require review.</p>
+        <p>Create a new actor from the selected sources. Compatible JSON choices and fixed source grants fill native advancements automatically. HP uses the first-level maximum and averages thereafter, without rolling. Selected feats, equipment, and class spells import through their source documents. Unmatched choices, ability overrides, and other bonuses require review.</p>
         <button type="button" data-create-actor disabled>Create Character</button>
         <button type="button" data-open-actor hidden>Open draft character</button>
         <p data-creation-status role="status" aria-live="polite"></p>
         <ul data-choice-report></ul>
+        <h3>Feat results</h3>
+        <ul data-feat-report></ul>
         <h3>Equipment and spell results</h3>
         <ul data-loadout-report></ul>
       </section>
@@ -84,6 +90,7 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
     root.querySelector("[data-create-actor]").disabled = true;
     root.querySelector("[data-match-results]").replaceChildren();
     root.querySelector("[data-loadout-results]").replaceChildren();
+    root.querySelector("[data-feat-results]").replaceChildren();
     root.querySelector("[data-match-status]").textContent = "";
   }
 
@@ -111,7 +118,9 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
     container.replaceChildren();
     const loadoutContainer = root.querySelector("[data-loadout-results]");
     loadoutContainer.replaceChildren();
-    for (const row of [...this.preview.rows, ...(this.preview.loadout ?? [])]) {
+    const featContainer = root.querySelector("[data-feat-results]");
+    featContainer.replaceChildren();
+    for (const row of [...this.preview.rows, ...(this.preview.feats ?? []), ...(this.preview.loadout ?? [])]) {
       const section = document.createElement("fieldset");
       section.style.marginBottom = "12px";
       const title = document.createElement("legend");
@@ -122,6 +131,12 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
         row.sourceIds.length ? `D&D Beyond source IDs: ${row.sourceIds.join(", ")}.` : "",
         "Source IDs are informational; edition equivalence is not assumed."].filter(Boolean).join(" ");
       const status = document.createElement("p");
+      if (row.nativeOnly) {
+        status.textContent = "Handled by the native ability-score advancement. No separate feat source is needed.";
+        section.append(title, info, status);
+        featContainer.append(section);
+        continue;
+      }
       const matchStatus = row.status === "missing" ? "No exact match. Search for alternatives or leave unresolved."
         : `${row.candidates.length} exact-name match${row.candidates.length === 1 ? "" : "es"}. Confirm the source and edition.`;
       status.textContent = row.selectedUuid ? "Single exact match selected automatically. Review the source and edition." : matchStatus;
@@ -167,7 +182,7 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
       search.addEventListener("input", fillOptions);
       fillOptions();
       section.append(title, info, status, search, select, uuid, inspect);
-      (row.kind ? loadoutContainer : container).append(section);
+      (row.kind === "feat" ? featContainer : row.kind ? loadoutContainer : container).append(section);
     }
     root.querySelector("[data-create-actor]").disabled = false;
   }
@@ -218,6 +233,17 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
     if (!list) return;
     list.replaceChildren();
     for (const entry of this.creation?.loadoutReport?.values() ?? []) {
+      const row = document.createElement("li");
+      row.textContent = `${entry.status === "review" ? "Needs review" : entry.status}: ${entry.name} — ${entry.detail}`;
+      list.append(row);
+    }
+  }
+
+  _showFeatReport() {
+    const list = this.element.querySelector("[data-feat-report]");
+    if (!list) return;
+    list.replaceChildren();
+    for (const entry of this.creation?.featReport?.values() ?? []) {
       const row = document.createElement("li");
       row.textContent = `${entry.status === "review" ? "Needs review" : entry.status}: ${entry.name} — ${entry.detail}`;
       list.append(row);
@@ -282,9 +308,9 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
         const packs = accessibleItemPacks(game.packs).filter(pack => selected.includes(pack.collection));
         const { entries, errors } = await indexOriginPacks(packs);
         if (this.character !== character) return;
-        this.preview = { rows: matchOrigins(characterOrigins(character), entries), loadout: matchLoadout(characterLoadout(character), entries), entries, errors };
+        this.preview = { rows: matchOrigins(characterOrigins(character), entries), feats: matchLoadout(characterFeats(character), entries), loadout: matchLoadout(characterLoadout(character), entries), entries, errors };
         this._showMatches(root);
-        status.textContent = `${this.preview.rows.length} origins and ${this.preview.loadout.length} equipment/spell entries reviewed across ${packs.length} compendiums. Review the sources below, then create the character.`
+        status.textContent = `${this.preview.rows.length} origins, ${this.preview.feats.length} feats, and ${this.preview.loadout.length} equipment/spell entries reviewed across ${packs.length} compendiums. Review the sources below, then create the character.`
           + (errors.length ? ` Search incomplete — could not read: ${errors.map(error => `${error.label}: ${error.message}`).join("; ")}` : "");
       } catch (error) { status.textContent = error.message; }
       finally {
@@ -313,10 +339,15 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
             if (!source?.testUserPermission(game.user, "OBSERVER")) throw new Error("A selected equipment/spell source is no longer accessible.");
             return source;
           });
-          this.creation = { characterId: this.character.id, data, tasks, loadout, loadoutReport: new Map(), completed: [], actor: null, busy: false, complete: false };
+          const feats = await prepareLoadoutPlan(this.preview.feats, this.preview.entries, async uuid => {
+            const source = await fromUuid(uuid);
+            if (!source?.testUserPermission(game.user, "OBSERVER")) throw new Error("A selected feat source is no longer accessible.");
+            return source;
+          });
+          this.creation = { characterId: this.character.id, data, tasks, feats, featReport: new Map(), loadout, loadoutReport: new Map(), completed: [], actor: null, busy: false, complete: false };
           const documents = new Map(tasks.map(task => [task.uuid, task.source]));
           this.creation.choices = {
-            character: this.character, entries: this.preview.entries, tasks, user: game.user, report: new Map(),
+            character: this.character, entries: this.preview.entries, tasks, featTasks: feats, user: game.user, report: new Map(),
             resolve: async uuid => {
               if (!documents.has(uuid)) documents.set(uuid, await fromUuid(uuid));
               return documents.get(uuid);
@@ -327,6 +358,11 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
         await buildActor(this.creation, {
           createActor: data => CONFIG.Actor.documentClass.create(data),
           applySource: (actor, task) => applyNativeSource(actor, task, this.creation.choices),
+          applyFeats: actor => importFeats(actor, this.creation.feats, {
+            character: this.creation.choices.character,
+            applySource: (actor, task) => applyNativeSource(actor, task, this.creation.choices),
+            report: this.creation.featReport, onReport: () => this._showFeatReport()
+          }),
           applyLoadout: actor => importLoadout(actor, this.creation.loadout, {
             character: this.creation.choices.character, fromCompendium: source => game.items.fromCompendium(source),
             report: this.creation.loadoutReport, onReport: () => this._showLoadoutReport()
@@ -337,7 +373,8 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
         if (this.creation.complete) {
           const report = [...this.creation.choices.report.values()];
           const review = [...this.creation.loadoutReport.values()].filter(entry => entry.status === "review").length;
-          status.textContent = `Created ${this.creation.actor.name}. ${report.filter(entry => entry.kind === "json").length} advancement choices filled from JSON; ${report.filter(entry => entry.kind === "default").length} used defaults; ${report.filter(entry => entry.kind === "manual").length} used manual prompts. Equipment/spell import finished with ${review} entries needing review. Check the reports and character sheet.`;
+          const featReview = [...this.creation.featReport.values()].filter(entry => entry.status === "review").length;
+          status.textContent = `Created ${this.creation.actor.name}. ${report.filter(entry => entry.kind === "json").length} advancement choices filled from JSON; ${report.filter(entry => entry.kind === "default").length} used defaults; ${report.filter(entry => entry.kind === "manual").length} used manual prompts. ${featReview} feats and ${review} equipment/spell entries need review. Check the reports and character sheet.`;
           this.creation.actor.sheet.render({ force: true });
         }
       } catch (error) {
@@ -359,6 +396,7 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
     if (this.preview) this._showMatches(root);
     this._showChoiceReport();
     this._showLoadoutReport();
+    this._showFeatReport();
     this._creationControls(root);
   }
 }

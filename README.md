@@ -15,11 +15,11 @@ A standalone Foundry VTT module for building D&D5e characters from D&D Beyond JS
 
 This folder is installed directly in the user's test Foundry environment. Local runtime edits are available after reloading Foundry; manifest changes may require restarting Foundry. Treat world document changes as persistent.
 
-Initial target: Foundry VTT v14 and D&D5e 6.0.6. JSON loading, source matching, actor creation, and automatic native advancement choices have been tested by the user. Equipment and spell imports still require live verification.
+Initial target: Foundry VTT v14 and D&D5e 6.0.6. JSON loading, source matching, actor creation, automatic native advancement choices, equipment, and spell imports have been tested by the user. The feat preview, per-level class feat/ASI mapping, and species ancestry alias matching still require live verification.
 
 ## Current status
 
-JSON loading, class/origin/equipment/spell matching, actor creation through native advancements, and selected equipment/class spell import. Missing or unsupported content remains a reported review item; this is not yet a complete character importer.
+JSON loading, class/origin/feat/equipment/spell matching, actor creation through native advancements, and selected feat/equipment/class spell import. Missing or unsupported content remains a reported review item; this is not yet a complete character importer.
 
 ### Load JSON in Foundry
 
@@ -35,7 +35,7 @@ Exact-name matches are restricted to the appropriate Item type. Each candidate d
 
 Use each row's alternative-name search to find entries with different names, such as a legacy suffix. Select an entry and use **View source item** to inspect it. Missing entries stay unresolved; no content is generated. Failed compendium reads are reported as an incomplete search. Changing the compendium selection clears the previous preview.
 
-Selections remain in memory in the window and are discarded when it closes. Feat choices within native advancements use these same selected compendiums. Separate review of feats outside advancements remains a future step.
+Selections remain in memory in the window and are discarded when it closes. Feats within and outside native advancements use these same selected compendiums.
 
 ### Create a character
 
@@ -55,13 +55,21 @@ Weapon mastery steps read the selected weapons from D&D Beyond's Weapon Mastery 
 
 HP automatically takes the native maximum at the first level of the original class and the native average at all other levels, including the first level of additional classes. No HP rolls are made. Constitution and source bonuses remain handled by D&D5e's native HP advancement.
 
-Per-level class ASIs, spell choices, item replacement, unknown names, and ambiguous/incompatible choices remain native prompts. Complete those using the character's choices on D&D Beyond. Base scores are set before advancements; final scores are not overwritten afterward, so native ability improvements are not doubled. JSON bonusStats and overrideStats are not applied and require review.
+Class feats and ASIs are mapped to their exact exported class feature and level when unambiguous. Repeated feat definitions whose modifiers cannot be attributed to a specific level remain manual. Spell choices within native advancements, item replacement, unknown names, and ambiguous/incompatible choices remain native prompts. Complete those using the character's choices on D&D Beyond. Base scores are set before advancements; final scores are not overwritten afterward, so native ability improvements are not doubled. JSON bonusStats and overrideStats are not applied and require review.
 
 The workshop reports **From JSON**, **From source**, **Default** (HP policy), and **Manual prompt** for advancement steps. Manual entries record that a prompt was needed; they do not mean a choice you subsequently completed is still missing. Automation is scoped to each import manager and its dynamically granted feature flows; no global advancement methods are patched.
 
 Canceling a native prompt pauses creation and retains the draft. **Continue Character** resumes that same actor in the same workshop window without repeating completed origins; **Open draft character** opens its sheet. Source controls are locked once creation starts. Keep this window open to continue a paused import. Closing it or reloading Foundry ends the in-memory session; the actor remains and can be completed through its sheet. Import flags record its source selections and progress but do not yet provide a cross-session resume UI.
 
-On completion the sheet opens. Review both reports, class levels, subclass, species, background, abilities, HP, equipment state, and spell preparation. Feats outside native advancement selections, currency, appearance, and other character details are not imported in this pass. Native source advancements may grant some of these themselves.
+On completion the sheet opens. Review the reports, feats, class levels, subclass, species, background, abilities, HP, equipment state, and spell preparation. Currency, appearance, and other character details are not imported in this pass. Native source advancements may grant some of these themselves.
+
+### Feats and species ancestry
+
+The **Feats** preview lists exported feats with source selection and class-level attribution where available. Class ASI steps use the selected feat source, native prerequisites, and native feat-granted advancements. A plain Ability Score Improvement is applied as the native class ASI rather than an extra rules item. Distinct modifier IDs preserve separate +1 assignments to the same ability; duplicate records of the same modifier are counted once.
+
+Background ability-improvement records are marked as handled by the native background advancement and need no separate compendium feat. Already-granted feats such as a background's origin feat are retained, with no second copy or bonus application. Additional matched feats are added through native advancement managers after origins and before equipment/spells so their spell grants can also be retained. Canceling an extra feat prompt pauses the same draft. Missing class-level feats are flagged rather than added as free bonus feats after the class advancement.
+
+Species options can differ in display names: D&D Beyond may export `Hill’s Tumble (Hill Giant)` while the selected Goliath source offers `Hill's Tumble`. The importer accepts the unqualified name only when it identifies a unique entry in that species' configured native choice pool. This is not a general fuzzy-name or cross-edition substitution.
 
 ### Equipment and spells
 
@@ -94,7 +102,7 @@ This only returns character data in memory; it does not create or change actors.
 4. Create a new character using matched source items and native advancements, applying character-specific values at the appropriate stage.
 5. Show a result report describing applied choices and anything still requiring attention.
 
-Supplied character-service responses have been inspected as references. JSON file/paste validation, source defaults, scrolling, source matching, actor creation, and automatic advancement selections have been confirmed by the user in Foundry. Equipment and spell imports still need live testing. Do not commit personal character exports by default.
+Supplied character-service responses have been inspected as references. JSON file/paste validation, source defaults, scrolling, source matching, actor creation, automatic advancement selections, equipment, and spell imports have been confirmed by the user in Foundry. Feat preview/class-level mapping and species ancestry alias matching still need live testing. Do not commit personal character exports by default.
 
 ## Reference project
 

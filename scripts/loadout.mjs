@@ -55,6 +55,7 @@ export function characterLoadout(character) {
 
 export function matchLoadout(rows, entries) {
   return rows.map(row => {
+    if (row.nativeOnly) return { ...row, candidates: [], selectedUuid: null, status: "native" };
     const candidates = entries.filter(entry => row.types.includes(entry.type) && nameKey(entry.name) === nameKey(row.name)
       && (row.kind !== "spell" || row.level === undefined || entry.level === row.level));
     return { ...row, candidates, selectedUuid: candidates.length === 1 ? candidates[0].uuid : null,

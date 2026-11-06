@@ -86,6 +86,26 @@ test("equipment/spell phase runs after origins and retries the same actor withou
   assert.equal(session.complete, true);
 });
 
+test("canceling an extra feat pauses before equipment, and continuing reuses the actor and origins", async () => {
+  const events = [];
+  const actor = { async setFlag() {} };
+  const session = { characterId: 1, tasks: [{ key: "class", name: "Test Class" }], completed: [] };
+  let finishFeat = false;
+  const dependencies = {
+    createActor: async () => { events.push("create"); return actor; },
+    applySource: async () => { events.push("origin"); return true; },
+    applyFeats: async () => { events.push("feat"); return finishFeat; },
+    applyLoadout: async () => { events.push("loadout"); }
+  };
+  await buildActor(session, dependencies);
+  assert.equal(session.complete, undefined);
+  assert.deepEqual(events, ["create", "origin", "feat"]);
+  finishFeat = true;
+  await buildActor(session, dependencies);
+  assert.deepEqual(events, ["create", "origin", "feat", "feat", "loadout"]);
+  assert.equal(session.complete, true);
+});
+
 test("native manager completion is scoped, cancel settles, and render failure removes hooks", async () => {
   const callbacks = new Map();
   const hooks = { on: (key, fn) => { callbacks.set(key, fn); return fn; }, off: key => callbacks.delete(key) };

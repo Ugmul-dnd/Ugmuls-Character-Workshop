@@ -149,7 +149,7 @@ export async function applyNativeSource(actor, task, choices = null) {
 }
 
 /** Session remains attached to the window so retries continue the same draft. */
-export async function buildActor(session, { createActor, applySource, applyLoadout, progress = () => {} }) {
+export async function buildActor(session, { createActor, applySource, applyFeats, applyLoadout, progress = () => {} }) {
   if (session.busy) throw new Error("Character creation is already running.");
   if (session.complete) return session.actor;
   session.busy = true;
@@ -168,6 +168,11 @@ export async function buildActor(session, { createActor, applySource, applyLoado
         characterId: String(session.characterId), status: "draft", completed: [...session.completed],
         sources: session.tasks.map(({ key, uuid, level }) => ({ key, uuid, ...(level ? { level } : {}) }))
       });
+    }
+    if (applyFeats && !session.featsComplete) {
+      progress("Reconciling selected feats with native grants.");
+      if (!await applyFeats(session.actor)) return session.actor;
+      session.featsComplete = true;
     }
     if (applyLoadout && !session.loadoutComplete) {
       progress("Importing selected equipment and spells; retaining native grants.");
