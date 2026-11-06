@@ -1,0 +1,80 @@
+const normalize = value => String(value ?? "").normalize("NFKC").toLowerCase()
+  .replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
+
+/** Foundry accepts shortened UUIDs, but source pools use the explicit Item segment. */
+export function canonicalItemUuid(uuid) {
+  if (typeof uuid !== "string") return uuid;
+  const parts = uuid.split(".");
+  if (parts[0] === "Compendium" && parts.length === 4) parts.splice(3, 0, "Item");
+  return parts.join(".");
+}
+
+export function characterOrigins(character) {
+  const rows = [];
+  for (const [index, cls] of character.classes.entries()) {
+    rows.push({ key: `class-${index}`, type: "class", label: "Class", name: cls.definition?.name ?? "",
+      level: cls.level, definition: cls.definition });
+    if (cls.subclassDefinition?.name) rows.push({ key: `subclass-${index}`, type: "subclass",
+      label: "Subclass", name: cls.subclassDefinition.name, parent: cls.definition?.name,
+      definition: cls.subclassDefinition });
+  }
+  rows.push({ key: "species", type: "race", label: "Species",
+    name: character.race?.fullName ?? character.race?.baseRaceName ?? "", definition: character.race });
+  const background = character.background;
+  rows.push({ key: "background", type: "background", label: "Background",
+    name: background?.hasCustomBackground ? background.customBackground?.name ?? "Custom background"
+      : background?.definition?.name ?? "",
+    definition: background?.hasCustomBackground ? background.customBackground : background?.definition,
+    custom: Boolean(background?.hasCustomBackground) });
+  return rows.map(({ definition, ...row }) => ({ ...row,
+    legacy: definition?.isLegacy,
+    sourceIds: [...new Set((definition?.sources ?? []).map(source => source.sourceId).filter(id => id != null))]
+  }));
+}
+
+export function accessibleItemPacks(packs) {
+  return [...packs].filter(pack => pack.documentName === "Item" && pack.visible);
+}
+
+/** Mirror D&D5e Configure Sources: a pack is enabled unless explicitly false. */
+export function worldSourceItemPacks(packs, configuration) {
+  return accessibleItemPacks(packs).filter(pack => configuration[pack.collection] !== false);
+}
+
+/** Index reads only; failures are reported individually rather than hidden as missing matches. */
+export async function indexOriginPacks(packs) {
+  const entries = [];
+  const errors = [];
+  // Bound work to one pack at a time; do not load entire compendium documents.
+  for (const pack of packs) {
+    try {
+      const index = await pack.getIndex({ fields: ["type", "system.source", "system.classIdentifier", "system.level"] });
+      for (const item of index) {
+        if (!["class", "subclass", "race", "background", "feat", "weapon", "equipment", "consumable", "tool", "loot", "container", "spell"].includes(item.type)) continue;
+        entries.push({ uuid: `Compendium.${pack.collection}.Item.${item._id}`, name: item.name,
+          type: item.type, pack: pack.collection, packLabel: pack.metadata.label,
+          book: item.system?.source?.book ?? "", rules: item.system?.source?.rules ?? "",
+          classIdentifier: item.system?.classIdentifier ?? "", level: item.system?.level });
+      }
+    } catch (error) {
+      errors.push({ pack: pack.collection, label: pack.metadata.label, message: error.message });
+    }
+  }
+  return { entries, errors };
+}
+
+export function matchOrigins(origins, entries) {
+  return origins.map(origin => {
+    const candidates = origin.name ? entries.filter(entry => entry.type === origin.type
+      && normalize(entry.name) === normalize(origin.name)) : [];
+    return { ...origin, candidates, selectedUuid: candidates.length === 1 ? candidates[0].uuid : null,
+      status: candidates.length > 1 ? "ambiguous" : candidates.length === 1 ? "review" : "missing" };
+  });
+}
+
+export function searchOriginEntries(origin, entries, query) {
+  const term = normalize(query);
+  return entries.filter(entry => (origin.types ?? [origin.type]).includes(entry.type)
+    && (!term || normalize(entry.name).includes(term)))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.packLabel.localeCompare(b.packLabel));
+}
