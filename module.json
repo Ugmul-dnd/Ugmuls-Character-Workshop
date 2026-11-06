@@ -1,0 +1,12 @@
+{
+  "id": "ugmuls-character-workshop",
+  "title": "Ugmuls Character Workshop",
+  "description": "Build D&D5e characters from D&D Beyond JSON using installed source books and compendiums.",
+  "version": "0.1.0",
+  "authors": [{ "name": "Ugmul" }],
+  "compatibility": { "minimum": "14", "verified": "14" },
+  "relationships": {
+    "systems": [{ "id": "dnd5e", "type": "system", "compatibility": { "minimum": "6.0.6" } }]
+  },
+  "esmodules": ["scripts/main.js"]
+}
