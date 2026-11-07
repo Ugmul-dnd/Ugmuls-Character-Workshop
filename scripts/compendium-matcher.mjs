@@ -27,6 +27,15 @@ export function featureSourceNames(name) {
   return normalize(name) === "enchanting conversationalist" ? [name, "Enchanting Conversation"] : [name];
 }
 
+/** Class/subclass preference only; never use this to hide spells or equipment. */
+export function classSourcePriority(entry) {
+  const source = `${entry.pack ?? ""} ${entry.uuid ?? ""} ${entry.book ?? ""} ${entry.packLabel ?? ""}`;
+  if (/dnd-tashas-cauldron|tasha[’']?s|tashas/i.test(source)) return 3;
+  if (String(entry.rules) === "2024") return 0;
+  if (String(entry.rules) === "2014") return 2;
+  return 1;
+}
+
 /** Foundry accepts shortened UUIDs, but source pools use the explicit Item segment. */
 export function canonicalItemUuid(uuid) {
   if (typeof uuid !== "string") return uuid;
@@ -94,8 +103,17 @@ export function matchOrigins(origins, entries) {
     const names = origin.matchNames?.length ? origin.matchNames : [origin.name];
     const candidates = origin.name ? entries.filter(entry => entry.type === origin.type
       && names.some(name => normalize(entry.name) === normalize(name))) : [];
-    return { ...origin, candidates, selectedUuid: candidates.length === 1 ? candidates[0].uuid : null,
-      status: candidates.length > 1 ? "ambiguous" : candidates.length === 1 ? "review" : "missing" };
+    const prioritize = ["class", "subclass"].includes(origin.type);
+    if (prioritize) candidates.sort((a, b) => classSourcePriority(a) - classSourcePriority(b));
+    const preferred = prioritize && candidates.length ? candidates.filter(entry => classSourcePriority(entry) === classSourcePriority(candidates[0])) : candidates;
+    const selected = preferred.length === 1 ? preferred[0] : null;
+    const selectionReason = selected && prioritize ? classSourcePriority(selected) === 3
+      ? "Tasha’s fallback selected; no other exact-name source is available. Review legacy compatibility."
+      : classSourcePriority(selected) === 2 ? "Legacy fallback selected; review compatibility with revised rules."
+        : candidates.length > 1 ? "Preferred class source selected automatically; revised rules and non-Tasha’s sources take priority. Review the source."
+          : undefined : undefined;
+    return { ...origin, candidates, selectedUuid: selected?.uuid ?? null, selectionReason,
+      status: candidates.length === 0 ? "missing" : selected ? "review" : "ambiguous" };
   });
 }
 
@@ -103,5 +121,7 @@ export function searchOriginEntries(origin, entries, query) {
   const term = normalize(query);
   return entries.filter(entry => (origin.types ?? [origin.type]).includes(entry.type)
     && (!term || normalize(entry.name).includes(term)))
-    .sort((a, b) => a.name.localeCompare(b.name) || a.packLabel.localeCompare(b.packLabel));
+    .sort((a, b) => a.name.localeCompare(b.name)
+      || (["class", "subclass"].includes(origin.type) ? classSourcePriority(a) - classSourcePriority(b) : 0)
+      || a.packLabel.localeCompare(b.packLabel));
 }

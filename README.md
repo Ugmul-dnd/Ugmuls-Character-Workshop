@@ -31,6 +31,12 @@ For manual import, open the generated character JSON link, choose a saved JSON f
 
 ### Five-step builder
 
+Local portrait saving uses the approved, deployed portrait Worker route described in `cloudflare/ddb-public-proxy/PORTRAIT-DEPLOYMENT-REVIEW.md`. New imports save artwork through Foundry's FilePicker in `worlds/<world-id>/token-images/`, using an actor-ID filename, and switch the portrait to that local file. File upload permission is required. A failed download/upload is logged and leaves the hosted portrait in place. No Tokenizer dependency is required.
+
+After alignment and item import, a read-only final audit compares the sheet's ability scores and proficiencies/tools with the JSON. Differences appear in Sheet & log and the actor's saved module review log. Ability expectations include base scores, bonusStats, recorded score increases, and overrideStats; conditional or unsupported score data is flagged for manual comparison. The audit reports missing/extra skills and tools, expertise differences, and unmapped proficiency names without modifying the actor. These are review findings, since effects or source differences may explain a mismatch.
+
+Unresolved skill/tool proficiency-only steps no longer block import. The builder keeps unambiguous native selections, skips the remaining slots, and adds missing JSON proficiencies directly to the completed sheet after native advancements and item imports. Reconciliation never removes extra proficiencies or downgrades expertise; it intentionally does not reconstruct source advancement links. Corrections are shown in the final log and saved on the actor. Unknown or ambiguous native proficiency keys are logged for GM review rather than replaced with guessed tools. Other choices, including languages, resistances, spells, and feats, retain their normal native handling.
+
 1. **Load JSON** — load by public character number, file, or pasted JSON. Matching starts automatically after validation.
 2. **Matched features** — review selected origins, feats, equipment, and spells. Source defaults follow the world; optional source controls are collapsed under Advanced.
 3. **Missing / unknown** — search the selected compendium indexes for compatible replacement sources, or leave Skip selected. Searching and selecting sources never mutate actors.
@@ -40,6 +46,8 @@ For manual import, open the generated character JSON link, choose a saved JSON f
 Skipped non-class entries receive an inert name-only placeholder with description **Needs GM Review**, after checking for a matching native grant. These contain no exported descriptions, effects, activities, or advancements. Equipment uses a compatible physical Item type, spells use an unprepared Spell item, and unresolved origins/feats use a Feature review marker. Class sources are required so native levels and advancement relationships remain valid. Placeholders are marked for review, and retries reuse them. This explicit review-marker workflow is the exception to the module's normal source-only import policy.
 
 ### Preview compendium matches
+
+Class and subclass exact-name matches prioritize sources marked 2024, then other non-Tasha’s sources with unspecified rules, then 2014 sources, and finally Tasha’s Cauldron. A unique candidate at the best priority is selected; ties still require review. All candidates remain available for manual selection, and legacy fallbacks are labeled. This preference does not alter spell, equipment, feat, species, or background searches. It does not convert legacy subclasses to revised rules.
 
 After loading JSON, the source compendiums default to the world's **D&D5e → Configure Sources** choices. This follows D&D5e's `packSourceConfiguration` behavior: a pack is included unless explicitly disabled, while inaccessible and non-Item packs are excluded. Defaults are read again each time JSON is loaded. You can adjust the checkboxes for this search without changing world settings. Matching starts automatically; use **Advanced → Find character matches** to repeat it after adjusting sources. The preview includes each class, any selected subclasses, species, background, inventory entries, and spells. Multiclass characters receive separate class and subclass rows.
 

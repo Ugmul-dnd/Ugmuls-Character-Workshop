@@ -1,5 +1,6 @@
-import { selectAdvancement, describeSelection, prefillTraitSelection, prefillSpellSelection } from "./advancement-choices.mjs";
+import { selectAdvancement, describeSelection, prefillTraitSelection, prefillSpellSelection, deferredProficiencySelection } from "./advancement-choices.mjs";
 import { canonicalItemUuid } from "./compendium-matcher.mjs";
+import { characterPortrait } from "./portrait.mjs";
 
 const MODULE_ID = "ugmuls-character-workshop";
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
@@ -11,7 +12,8 @@ export function baseActorData(character, userId) {
     if (!Number.isInteger(value) || value < 1 || value > 30) throw new Error(`Invalid base ${key.toUpperCase()} score in JSON.`);
     abilities[key] = { value };
   }
-  return { name: character.name, type: "character", system: { abilities }, ownership: { [userId]: 3 },
+  const portrait = characterPortrait(character);
+  return { name: character.name, type: "character", ...(portrait ? { img: portrait } : {}), system: { abilities }, ownership: { [userId]: 3 },
     flags: { [MODULE_ID]: { importState: { characterId: String(character.id), status: "draft", completed: [] } } } };
 }
 
@@ -85,7 +87,12 @@ export function runAdvancement(manager, hooks = globalThis.Hooks, choices = null
         let reason = choices.report.get(key)?.kind === "manual" ? choices.report.get(key).detail : "No unique compatible JSON selection; complete the native prompt.";
         try { data = await selectAdvancement(this, choices); }
         catch (error) { reason = `Needs review: ${error.message}`; }
-        let kind = data && (advancement.type === "HitPoints" || (advancement.type === "ItemChoice"
+        let deferred = false;
+        if (!data) {
+          const value = await deferredProficiencySelection(this, choices);
+          if (value) { data = value; deferred = true; }
+        }
+        let kind = deferred ? "default" : data && (advancement.type === "HitPoints" || (advancement.type === "ItemChoice"
           && data.selected?.length === 0 && advancement.configuration.choices[this.level]?.replacement)) ? "default"
           : data && advancement.type === "Size" && advancement.configuration.sizes.size === 1 ? "source" : "json";
         if (!data) {
@@ -110,6 +117,7 @@ export function runAdvancement(manager, hooks = globalThis.Hooks, choices = null
           try { detail = await describeSelection(this, data, choices); }
           catch { detail = "JSON selection applied."; }
         }
+        if (deferred) detail = "Unresolved proficiency selection skipped. Missing JSON proficiencies will be aligned directly on the sheet after building.";
         choices.report.set(key, { kind, label, detail });
         choices.onReport?.();
         return data || false;

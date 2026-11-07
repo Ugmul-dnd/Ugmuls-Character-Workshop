@@ -353,3 +353,19 @@ test('numbered Weapon Mastery feats include Longbow at level four without offeri
  assert.deepEqual(await traitSelection(advancement,{modifiers:[]},input),{chosen:['weapon:mar:longbow']});
 });
 
+
+test('background language selection uses racial choices before later class languages',async()=>{
+ const input={...character,modifiers:{race:[{type:'language',friendlySubtypeName:'Common'},{type:'language',friendlySubtypeName:'Orc'},{type:'language',friendlySubtypeName:'Dwarvish'}],class:[{type:'language',friendlySubtypeName:'Goblin'},{type:'language',friendlySubtypeName:'Elvish'}]}};
+ const pool=choices(['Orc','Dwarvish','Goblin','Elvish'].map(name=>({value:`languages:${name.toLowerCase()}`,label:name})));
+ const advancement={configuration:{mode:'default'},unfulfilledChoices:async()=>({available:[{type:'choice',choices:pool},{type:'choice',choices:pool}],choices:pool})};
+ assert.deepEqual(await traitSelection(advancement,{kind:'background',modifiers:[]},input),{chosen:['languages:dwarvish','languages:orc']});
+});
+
+test('Noble Dice Set maps to the native Dice gaming proficiency',async()=>{
+ const pool=choices([{value:'tool:game:dice',label:'Dice'},{value:'tool:game:dragonchess',label:'Dragonchess'}]);
+ const advancement={configuration:{mode:'default'},unfulfilledChoices:async()=>({available:[{type:'choice',choices:pool}],choices:pool})};
+ assert.deepEqual(await traitSelection(advancement,{modifiers:[{type:'proficiency',friendlySubtypeName:'Dice Set',subType:'dice-set'}]}),{chosen:['tool:game:dice']});
+ const skills=choices([{value:'skills:dice',label:'Dice'}]);
+ advancement.unfulfilledChoices=async()=>({available:[{type:'choice',choices:skills}],choices:skills});
+ assert.equal(await traitSelection(advancement,{modifiers:[{type:'proficiency',friendlySubtypeName:'Dice Set'}]}),null);
+});

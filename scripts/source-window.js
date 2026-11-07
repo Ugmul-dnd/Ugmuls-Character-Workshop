@@ -7,6 +7,9 @@ import { characterFeats, importFeats } from "./feats.mjs";
 
 import { previewRows, needsReview, createReviewItems } from "./review-items.mjs";
 import { replacementEntry } from "./source-picker.mjs";
+import { reconcileProficiencies } from "./proficiencies.mjs";
+import { finalCharacterAudit } from "./final-audit.mjs";
+import { characterPortrait, saveCharacterPortrait } from "./portrait.mjs";
 
 export class CharacterSourceWindow extends foundry.applications.api.ApplicationV2 {
   static DEFAULT_OPTIONS = {
@@ -150,7 +153,7 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
     const next = root.querySelector("[data-next]");
     next.hidden = step >= 4;
     next.disabled = this.searching || !this.preview || this.preparing;
-    next.textContent = step === 1 ? "Review matches" : step === 2 ? "Review missing / unknown" : "Continue to builder";
+    next.textContent = step <= 2 ? "Review missing / unknown" : "Continue to builder";
     const rows = previewRows(this.preview);
     const missing = rows.filter(needsReview);
     const missingClasses = missing.filter(row => row.type === "class");
@@ -226,9 +229,9 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
       const matchStatus = row.status === "missing" ? "No exact match. Search for alternatives or leave unresolved."
         : `${row.candidates.length} exact-name match${row.candidates.length === 1 ? "" : "es"}. Confirm the source and edition.`;
       status.textContent = row.selectedUuid
-        ? row.kind === "equipment" && row.candidates.length > 1
+        ? row.selectionReason ?? (row.kind === "equipment" && row.candidates.length > 1
           ? `First of ${row.candidates.length} exact-name matches selected automatically. You can change the source below.`
-          : "Single exact match selected automatically. Review the source and edition."
+          : "Single exact match selected automatically. Review the source and edition.")
         : matchStatus;
       status.setAttribute("role", "status");
       const search = document.createElement("input");
@@ -379,11 +382,11 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
     super._onRender(context, options);
     const root = this.element;
     root.querySelectorAll("[data-step]").forEach(button => button.addEventListener("click", () => this._showStep(Number(button.dataset.step))));
-    root.querySelector("[data-previous]").addEventListener("click", () => this._showStep(Math.max(1, this.step - 1)));
+    root.querySelector("[data-previous]").addEventListener("click", () => this._showStep(this.step === 3 ? 1 : Math.max(1, this.step - 1)));
     root.querySelector("[data-next]").addEventListener("click", () => {
       if (this.preview && !this.creation) {
         this._showMatches(root);
-        this._showStep(Math.min(4, this.step + 1));
+        this._showStep(this.step === 1 ? 3 : Math.min(4, this.step + 1));
       }
     });
     const idInput = root.querySelector("[data-character-id]");
@@ -460,7 +463,7 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
         this.searching = false;
         button.disabled = false;
         controls.forEach(control => { control.disabled = false; });
-        this._showStep(2);
+        this._showStep(this.preview ? 3 : 2);
       }
     });
     root.querySelector("[data-open-actor]").addEventListener("click", () => this.creation?.actor?.sheet.render({ force: true }));
@@ -514,7 +517,18 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
             report: this.creation.loadoutReport, onReport: () => this._showLoadoutReport()
           }),
           applyReview: async actor => {
-            this.creation.reviewLog = await createReviewItems(actor, previewRows(this.preview));
+            const proficiencyLog = this.creation.proficiencyLog ??= await reconcileProficiencies(actor, this.creation.choices.character);
+            const placeholders = await createReviewItems(actor, previewRows(this.preview));
+            const audit = await finalCharacterAudit(actor, this.creation.choices.character);
+            this.creation.reviewLog = [...placeholders, ...proficiencyLog, ...audit];
+            if (characterPortrait(this.creation.choices.character)) {
+              if (!this.creation.portraitLog) {
+                try { this.creation.portraitLog = await saveCharacterPortrait(actor, this.creation.choices.character); }
+                catch (error) { this.creation.portraitLog = { name: "Character portrait — Needs GM Review",
+                  detail: `Could not save a local copy: ${error.message} The original hosted portrait remains in use.` }; }
+              }
+              this.creation.reviewLog.push(this.creation.portraitLog);
+            }
             this._showReviewReport();
             await actor.setFlag("ugmuls-character-workshop", "reviewLog", {
               items: this.creation.reviewLog,

@@ -1,3 +1,4 @@
+import { withPortraits } from "./portrait-response.mjs";
 const UPSTREAM = "https://character-service.dndbeyond.com/character/v5/character/";
 export const POLICY = Object.freeze({ timeoutMs: 15000, maxBytes: 2 * 1024 * 1024, cacheSeconds: 60 });
 
@@ -154,4 +155,4 @@ export function createProxy({ fetchImpl = globalThis.fetch, cacheProvider = () =
   };
 }
 
-export default createProxy();
+export default withPortraits(createProxy());

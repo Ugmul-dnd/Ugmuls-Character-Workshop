@@ -115,6 +115,11 @@ function modifierNames(modifier) {
   return names.filter(Boolean).map(name => choiceName(name.replace(/ saving throws$/i, "")));
 }
 
+function optionNames(option) {
+  // Native gaming-set leaves are named Dice/Dragonchess; DDB can append Set.
+  return [choiceName(option.label), ...(option.value.startsWith("tool:game:") ? [choiceName(`${option.label} Set`)] : [])];
+}
+
 export function characterMasteryNames(character, level = Infinity) {
   const masteryFeats = (character.feats ?? []).filter(feat => /^(?:\d+\s*:\s*)?Weapon Mastery$/i.test(feat.definition?.name ?? ""));
   const feats = masteryFeats.filter(feat => Number(feat.definition.name.match(/^(\d+)\s*:/)?.[1] ?? 1) <= level);
@@ -180,6 +185,13 @@ async function traitChoiceState(advancement, scope, character = null) {
   }
   if (character && languageOnly && ["race", "background"].includes(scope.kind)) {
     modifiers = groupRecords(character.modifiers).filter(modifier => modifier.type === "language");
+    const pools = scope.kind === "background" ? [scope.modifiers, character.modifiers?.race ?? []] : [scope.modifiers];
+    for (const pool of pools) {
+      const languages = pool.filter(modifier => modifier.type === "language");
+      const names = new Set(languages.flatMap(modifierNames));
+      const eligible = options.filter(option => !option.disabled && slotKeys.includes(option.value) && names.has(choiceName(option.label)));
+      if (eligible.length >= available.length) { modifiers = languages; break; }
+    }
   }
   const desiredNames = mode === "mastery" ? new Set(characterMasteryNames(character ?? { modifiers: { source: scope.modifiers } }, advancement.level ?? Infinity).map(choiceName))
     : new Set(modifiers.filter(modifier =>
@@ -187,7 +199,7 @@ async function traitChoiceState(advancement, scope, character = null) {
     && (!["expertise", "upgrade"].includes(mode) || modifier.type === "expertise"))
     .flatMap(modifierNames));
   const desired = new Set(options.filter(option => !option.disabled && slotKeys.includes(option.value)
-    && desiredNames.has(choiceName(option.label))).map(option => option.value));
+    && optionNames(option).some(name => desiredNames.has(name))).map(option => option.value));
   const damageTypes = { resistance: "dr:", immunity: "di:", vulnerability: "dv:" };
   if (mode === "default") for (const option of options) {
     if (option.disabled || !slotKeys.includes(option.value)) continue;
@@ -228,6 +240,19 @@ export async function traitSelection(advancement, scope, character = null) {
 }
 
 /** Prefill supported proficiencies on the manager's clone, leaving unknown slots manual. */
+export async function deferredProficiencySelection(flow, context) {
+  const advancement = flow.advancement;
+  if (advancement.type !== "Trait" || !["default", "expertise", "upgrade"].includes(advancement.configuration.mode)) return null;
+  const { available } = await advancement.unfulfilledChoices();
+  if (!available.length || available.some(slot => !slot.choices.asSet().size
+    || [...slot.choices.asSet()].some(value => !/^(skills|tool):/.test(value)))) return null;
+  // Keep any unambiguous partial choices and defer the rest to sheet alignment.
+  const partial = advancement.configuration.mode === "default" ? await prefillTraitSelection(flow, context) : null;
+  const fixed = available.filter(slot => slot.type === "grant" && slot.choices.asSet().size === 1)
+    .flatMap(slot => [...slot.choices.asSet()]);
+  return { chosen: [...new Set([...(partial?.data?.chosen ?? []), ...fixed])] };
+}
+
 export async function prefillTraitSelection(flow, context) {
   const advancement = flow.advancement;
   if (advancement.type !== "Trait" || advancement.configuration.mode !== "default") return null;
@@ -235,7 +260,7 @@ export async function prefillTraitSelection(flow, context) {
   const scope = scopeForItem(context.character, advancement.item, level);
   if (!scope) return null;
   const { desired, slots, options, modifiers, languageOnly } = await traitChoiceState(advancement, scope, context.character);
-  const availableNames = new Set(options.filter(option => !option.disabled && slots.some(slot => slot.keys.includes(option.value))).map(option => choiceName(option.label)));
+  const availableNames = new Set(options.filter(option => !option.disabled && slots.some(slot => slot.keys.includes(option.value))).flatMap(optionNames));
   const missing = [...new Set(modifiers.filter(modifier => (languageOnly ? ["language"] : ["proficiency", "language", "resistance"]).includes(modifier.type))
     .map(modifier => modifier.friendlySubtypeName ?? modifier.subType?.replaceAll("-", " "))
     .filter(name => name && !availableNames.has(choiceName(name))))];
@@ -425,15 +450,17 @@ async function classAbilitySelection(flow, context) {
 /** The caller falls back to native fixed grants or a manual prompt if this returns null. */
 async function spellGrantSelection(advancement, character, scope, context) {
   const config = advancement.configuration;
-  if (!config.spell?.ability || config.spell.ability.size <= 1 || config.optional
-    || !config.items?.length || config.items.some(item => item.optional)) return null;
+  if (!config.spell?.ability || config.spell.ability.size <= 1 || !config.items?.length) return null;
   const exported = (character.spells?.[scope.group] ?? []).filter(Boolean);
   const selected = [];
   const abilities = new Set();
   for (const grant of config.items) {
     const source = await context.resolve(grant.uuid);
     if (!source || source.type !== "spell" || !source.testUserPermission(context.user, "OBSERVER")) return null;
-    const matches = exported.filter(spell => sameName(spell.definition?.name, source.name));
+    const matches = exported.filter(spell => sameName(spell.definition?.name, source.name)
+      && (!scope.componentIds?.length || scope.componentIds.includes(spell.componentId)));
+    // Optional grants are selected only when the export explicitly records them.
+    if ((config.optional || grant.optional) && !matches.length) return null;
     for (const spell of matches) {
       const ability = Object.values(abilityKeys)[spell.spellCastingAbilityId - 1];
       if (!ability || !config.spell.ability.has(ability)) return null;

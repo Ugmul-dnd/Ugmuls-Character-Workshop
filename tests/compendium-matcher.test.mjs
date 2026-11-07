@@ -41,7 +41,7 @@ test("a custom background does not fall back to the underlying stock definition"
   assert.equal(rows.at(-1).custom, true);
 });
 
-test("defaults a single exact match while keeping conflicting editions and wrong types unresolved", () => {
+test("prefers revised class sources while keeping wrong types unresolved", () => {
   const entries = [
     { type: "class", name: "Warlock", rules: "2014", uuid: "old" },
     { type: "class", name: "Warlock", rules: "2024", uuid: "new" },
@@ -49,12 +49,13 @@ test("defaults a single exact match while keeping conflicting editions and wrong
     { type: "background", name: "Pact Seeker", uuid: "background" }
   ];
   const rows = matchOrigins(characterOrigins(character), entries);
-  assert.equal(rows[0].status, "ambiguous");
+  assert.equal(rows[0].status, "review");
+  assert.equal(rows[0].selectedUuid, "new");
   assert.equal(rows[0].candidates.length, 2);
   assert.equal(rows[3].status, "missing");
   assert.equal(rows[4].status, "review");
   assert.equal(rows[4].selectedUuid, "background");
-  assert(rows.slice(0, 4).every(row => row.selectedUuid === null));
+  assert(rows.slice(1, 4).every(row => row.selectedUuid === null));
 });
 
 test("custom backgrounds can match existing source items, but differently spelled names need manual selection", () => {
@@ -93,4 +94,19 @@ test("only visible item packs are eligible, indexes stay read-only and failed pa
   assert.equal(result.entries[0].rules, "2024");
   assert.equal(result.errors.length, 1);
   assert.equal(result.errors[0].pack, "test.broken");
+});
+
+
+test('Tasha class/subclass entries are fallback candidates, never preferred over another book',()=>{
+ const origin={name:'Artificer',type:'class'};
+ const tasha={name:'Artificer',type:'class',uuid:'Compendium.dnd-tashas-cauldron.classes.Item.a',rules:'2014'};
+ const revised={name:'Artificer',type:'class',uuid:'Compendium.dnd-forge-artificer.classes.Item.a',rules:'2024'};
+ const rows=matchOrigins([origin],[tasha,revised]);
+ assert.equal(rows[0].selectedUuid,revised.uuid);
+ assert.equal(rows[0].candidates.length,2);
+ assert.match(matchOrigins([origin],[tasha])[0].selectionReason,/fallback/);
+ const subclass={name:'Example Subclass',type:'subclass'};
+ const old={...tasha,...subclass};const modern={...revised,...subclass};
+ assert.equal(matchOrigins([subclass],[old,modern])[0].selectedUuid,modern.uuid);
+ assert.equal(matchOrigins([subclass],[old,modern,{...modern,uuid:'another-modern'}])[0].selectedUuid,null);
 });

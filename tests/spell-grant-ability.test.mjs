@@ -14,8 +14,18 @@ test('spell ability grants remain manual if conflicting, optional, unavailable, 
  const a=advancement('Thaumaturgy');const context={character:structuredClone(character),user:{},resolve:async()=>({name:'Thaumaturgy',type:'spell',testUserPermission:()=>true})};
  context.character.spells.race.push({definition:{name:'Thaumaturgy'},spellCastingAbilityId:6});
  assert.equal(await selectAdvancement({advancement:a,level:1},context),null);
- context.character=character;a.configuration.optional=true;
+ context.character={...character,spells:{race:[]}};a.configuration.optional=true;
  assert.equal(await selectAdvancement({advancement:a,level:1},context),null);
  a.configuration.optional=false;a.configuration.spell.ability=new Set(['int','cha']);
  assert.equal(await selectAdvancement({advancement:a,level:1},context),null);
+});
+
+
+test('optional Mark spell grants advance only when explicitly present in the export',async()=>{
+ const character={classes:[],feats:[{definition:{id:50,name:'Mark of Shadow'}}],spells:{feat:[{definition:{name:'Minor Illusion'},componentId:50,spellCastingAbilityId:5}]}};
+ const advancement={type:'ItemGrant',item:{type:'feat',name:'Mark of Shadow'},actor:{system:{details:{level:3}}},configuration:{optional:true,items:[{uuid:'illusion',optional:false}],spell:{ability:new Set(['int','wis','cha'])}}};
+ const context={character,user:{},resolve:async()=>({name:'Minor Illusion',type:'spell',testUserPermission:()=>true})};
+ assert.deepEqual(await selectAdvancement({advancement,level:0},context),{ability:'wis',selected:['illusion']});
+ character.spells.feat=[];
+ assert.equal(await selectAdvancement({advancement,level:0},context),null);
 });
