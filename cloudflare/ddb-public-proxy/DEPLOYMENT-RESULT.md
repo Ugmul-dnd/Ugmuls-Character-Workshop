@@ -2,7 +2,7 @@
 
 The user explicitly approved public deployment. Created only `ugmuls-ddb-public-proxy` through the connected Cloudflare API, uploading the locally validated Vite bundle. Enabled workers.dev and kept preview URLs disabled. Local configuration now matches that routing setting.
 
-- Base URL: https://ugmuls-ddb-public-proxy.anthony-e-colbert.workers.dev
+- Base URL: https://ugmuls-ddb-public-proxy.ugmul-importer.workers.dev
 - Route: `/v1/characters/{numeric-id}`
 - Deployment: `52014bc6-0abd-4580-a215-7c9ade81fe89`
 - Active version: `196047c0-6170-466d-b8e5-7546a17a2c6c` at 100%

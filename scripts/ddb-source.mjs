@@ -1,5 +1,5 @@
 const SERVICE_ORIGIN = "https://character-service.dndbeyond.com";
-export const PUBLIC_CHARACTER_SERVICE = "https://ugmuls-ddb-public-proxy.anthony-e-colbert.workers.dev";
+export const PUBLIC_CHARACTER_SERVICE = "https://ugmuls-ddb-public-proxy.ugmul-importer.workers.dev";
 
 /** Accept a character number or a URL on the supplied character-service endpoint. */
 export function parseCharacterId(input) {

@@ -4,7 +4,7 @@
 
 Create one new Worker, `ugmuls-ddb-public-proxy`, in the connected account. Enable its workers.dev endpoint:
 
-`https://ugmuls-ddb-public-proxy.anthony-e-colbert.workers.dev`
+`https://ugmuls-ddb-public-proxy.ugmul-importer.workers.dev`
 
 The sole retrieval route is `GET /v1/characters/{numeric-id}`. Enable `workersDev` only after approval; leave preview URLs disabled. Do not change Pages projects, domains, DNS, Tunnels, or Foundry module behavior.
 
