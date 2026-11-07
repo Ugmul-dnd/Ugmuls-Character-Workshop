@@ -2,13 +2,17 @@
 
 ## 0.2.0 — Beta
 
-- Prepared the public-character import workflow for beta release.
-- Added source replacement review, name-only GM review placeholders, native-choice assistance, proficiency alignment, and a final comparison report.
-- Added public JSON retrieval and local portrait saving through the shared service.
-- Added class/subclass source priority with Tasha’s/legacy fallbacks.
-- Documented the relationship to Ugmul’s 5.5e Automation and the boundary between character import assistance and gameplay automation.
-- Added a reproducible Foundry-only release package.
+- Import public D&D Beyond characters by number or URL, or use saved/pasted JSON.
+- Build characters from approved, accessible Foundry compendium sources.
+- Review missing content and choose alternate sources through compendium search or the picker.
+- Fill supported native advancement choices and import equipment and spells.
+- Align missing proficiencies and save character portraits locally when permissions allow.
+- Review ability-score, proficiency, and tool differences in the final log.
+- Prefer revised-rule class/subclass sources, with legacy sources as fallbacks.
+- Retain unresolved content as name-only Needs GM Review placeholders where appropriate.
+
+This beta complements Ugmul's 5.5e Automation but works independently. It does not add macros or gameplay automation for unknown features, skills, or weapons. Review the imported character before play.
 
 ## 0.1.0
 
-- Initial development and live-world testing.
+- Initial character import workflow.
