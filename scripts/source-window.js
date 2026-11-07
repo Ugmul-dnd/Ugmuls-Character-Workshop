@@ -40,9 +40,10 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
       <section data-step-panel="1">
       <h2>Load your character</h2>
       <p>Enter a public D&D Beyond character number to load it directly. No Cloudflare account or sign-in is needed.</p>
+      <p id="ucw-character-id-help">Open your character in the D&D Beyond character viewer and look at the address bar. The number after <strong>/characters/</strong> is your character number. For example, <code>dndbeyond.com/characters/173272347</code> uses <strong>173272347</strong>. Enter your own character number below and make sure the character is set to Public.</p>
       <p>Loading sends the character number to the shared workshop service, which retrieves the public JSON. No actors or source items are changed until you choose Create Character.</p>
       <div class="form-group"><label for="ucw-character-id">Character number or service URL</label>
-        <input id="ucw-character-id" type="text" data-character-id placeholder="171139899"></div>
+        <input id="ucw-character-id" type="text" data-character-id aria-describedby="ucw-character-id-help" placeholder="Enter your character number or service URL"></div>
       <button type="button" data-load-public>Load public character</button>
       <p><a data-service-link target="_blank" rel="noopener noreferrer" hidden>Open character JSON in browser</a></p>
       <p data-link-error role="status"></p>
