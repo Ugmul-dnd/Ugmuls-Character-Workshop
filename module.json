@@ -1,8 +1,11 @@
 {
   "id": "ugmuls-character-workshop",
   "title": "Ugmuls Character Workshop",
-  "description": "Build D&D5e characters from D&D Beyond JSON using installed source books and compendiums.",
-  "version": "0.1.0",
+  "description": "Beta character importer designed to supplement Ugmul’s 5.5e Automation. Import public D&D Beyond characters using your world’s approved, accessible compendium sources. Review or replace unmatched entries; unknown content may receive a Needs GM Review placeholder. No new gameplay automation or macros for unknown features are included.",
+  "version": "0.2.0",
+  "url": "https://github.com/Ugmul-dnd/Ugmuls-Character-Workshop",
+  "manifest": "https://github.com/Ugmul-dnd/Ugmuls-Character-Workshop/releases/latest/download/module.json",
+  "download": "https://github.com/Ugmul-dnd/Ugmuls-Character-Workshop/releases/download/v0.2.0/ugmuls-character-workshop.zip",
   "authors": [{ "name": "Ugmul" }],
   "compatibility": { "minimum": "14", "verified": "14" },
   "relationships": {

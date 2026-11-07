@@ -1,6 +1,24 @@
 # Ugmuls Character Workshop
 
-A standalone Foundry VTT module for building D&D5e characters from D&D Beyond JSON exports using installed source books and compendiums.
+**v0.2.0 — Beta**
+
+Ugmuls Character Workshop is designed to supplement **Ugmul’s 5.5e Automation** by importing public D&D Beyond characters and building them in Foundry VTT using your world’s approved, accessible compendium sources. It can also be used independently; 5.5e Automation is not a required dependency.
+
+The builder gives you opportunities to match or replace feats, items, and abilities that do not have a direct representation in your selected compendiums. Your source books and compendium permissions determine which content is available; the module does not supply those books.
+
+**This is a beta, one-time import workflow intended to get a character started. Review the completed sheet and final comparison log before play.**
+
+It does not implement new gameplay automation for features, skills, or weapons. It includes no built-in macros or automation for unknown D&D Beyond content. Unresolved entries may become name-only placeholder features/items with the description **Needs GM Review**, for a GM to create or modify afterward. Existing source activities, effects, and advancements are preserved; missing mechanics are not generated from D&D Beyond descriptions.
+
+### Installation
+
+Requires Foundry VTT v14 and D&D5e 6.0.6 or later. Install the source books/compendiums you wish to use and configure their access for the importing user.
+
+After the v0.2.0 GitHub release is published, install from Foundry Setup → Add-on Modules → Install Module using:
+
+`https://github.com/Ugmul-dnd/Ugmuls-Character-Workshop/releases/latest/download/module.json`
+
+Enable the module, then open **Actors → Import D&D Beyond** or its settings menu. Load a public character by number, review missing entries, and run the builder. File/paste JSON import remains available. Local portrait saving requires file upload permission.
 
 ## Core approach
 
@@ -9,13 +27,13 @@ A standalone Foundry VTT module for building D&D5e characters from D&D Beyond JS
 - Create the actor's embedded items from those source documents, preserving their activities, effects, advancements, and source identity. Do not reconstruct rules content from D&D Beyond descriptions.
 - Use native D&D5e advancements for grants and choices. Reconcile those grants before adding other items to avoid duplicates or applying bonuses twice.
 - Report missing entries and ambiguous matches for review. Never silently fabricate replacement rules content or choose between conflicting editions.
-- Keep this module independent of Ugmuls 5.5e Automation. That project is a reference, not a dependency.
+- Designed to complement Ugmuls 5.5e Automation while remaining independently installable, without a hard dependency.
 
 ## Development environment
 
 This folder is installed directly in the user's test Foundry environment. Local runtime edits are available after reloading Foundry; manifest changes may require restarting Foundry. Treat world document changes as persistent.
 
-Initial target: Foundry VTT v14 and D&D5e 6.0.6. JSON loading, source matching, actor creation, automatic native advancement choices, equipment, and spell imports have been tested by the user. The feat preview, per-level class feat/ASI mapping, and species ancestry alias matching still require live verification.
+Initial target: Foundry VTT v14 and D&D5e 6.0.6. The user has tested approximately 10–15 characters across campaigns, including source matching, native advancements, feats, equipment, spells, species choices, and local portraits. This does not establish coverage of every class, subclass, source book, or combination; further beta testing is encouraged.
 
 ## Current status
 
