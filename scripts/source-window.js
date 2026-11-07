@@ -6,6 +6,7 @@ import { characterLoadout, matchLoadout, prepareLoadoutPlan, importLoadout } fro
 import { characterFeats, importFeats } from "./feats.mjs";
 
 import { previewRows, needsReview, createReviewItems } from "./review-items.mjs";
+import { replacementEntry } from "./source-picker.mjs";
 
 export class CharacterSourceWindow extends foundry.applications.api.ApplicationV2 {
   static DEFAULT_OPTIONS = {
@@ -271,9 +272,39 @@ export class CharacterSourceWindow extends foundry.applications.api.ApplicationV
         inspect.disabled = !row.selectedUuid;
         this._showStep();
       });
+      const browse = document.createElement("button");
+      browse.type = "button";
+      browse.textContent = "Choose replacement from compendiums";
+      browse.addEventListener("click", async () => {
+        const preview = this.preview;
+        browse.disabled = true;
+        try {
+          const types = new Set(row.types ?? [row.type]);
+          const selected = await dnd5e.applications.CompendiumBrowser.selectOne({
+            tab: row.kind === "equipment" ? "physical" : row.kind === "spell" ? "spells"
+              : ({ class: "classes", subclass: "subclasses", race: "races", background: "backgrounds" }[row.type] ?? "feats"),
+            filters: { locked: { documentClass: "Item", types }, initial: { documentClass: "Item", types } },
+            selection: { min: 1, max: 1 }
+          });
+          if (!selected) return;
+          const source = await fromUuid(selected);
+          if (this.preview !== preview || this.preparing || this.creation) throw new Error("The preview changed or building started. Return to this step before choosing a replacement.");
+          const entry = replacementEntry(row, source, game.packs.get(source?.pack), game.user);
+          if (!preview.entries.some(candidate => candidate.uuid === entry.uuid)) preview.entries.push(entry);
+          row.selectedUuid = entry.uuid;
+          row.manualSelection = true;
+          row.skip = false;
+          fillOptions();
+          uuid.textContent = entry.uuid;
+          inspect.disabled = false;
+          status.textContent = `Replacement selected: ${entry.name} (${entry.packLabel}). No actor or item has been changed.`;
+          this._showStep();
+        } catch (error) { ui.notifications.error(error.message); }
+        finally { browse.disabled = Boolean(this.creation) || this.preparing; }
+      });
       search.addEventListener("input", fillOptions);
       fillOptions();
-      section.append(title, info, status, search, select, uuid, inspect);
+      section.append(title, info, status, search, select, browse, uuid, inspect);
       (needsReview(row) ? missingContainer : row.kind === "feat" ? featContainer : row.kind ? loadoutContainer : container).append(section);
     }
     root.querySelector("[data-create-actor]").disabled = false;
