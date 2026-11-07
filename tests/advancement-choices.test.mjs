@@ -99,12 +99,12 @@ test("native background language slots can use species JSON languages without bo
   const advancement = { configuration: { mode: "default" }, unfulfilledChoices: async () => ({
     available: [{ type: "choice", choices: nativeChoices }, { type: "choice", choices: nativeChoices }], choices: nativeChoices
   }) };
-  assert.deepEqual(await traitSelection(advancement, { modifiers: [] }, input), {
+  assert.deepEqual(await traitSelection(advancement, { kind: "background", modifiers: [] }, input), {
     chosen: ["languages:standard:elvish", "languages:standard:giant"]
   });
   const skills = choices([{ value: "skills:per", label: "Persuasion" }]);
   advancement.unfulfilledChoices = async () => ({ available: [{ type: "choice", choices: skills }], choices: skills });
-  assert.equal(await traitSelection(advancement, { modifiers: [] }, input), null);
+  assert.equal(await traitSelection(advancement, { kind: "background", modifiers: [] }, input), null);
 });
 
 test("more known languages than available slots stays ambiguous", async () => {
@@ -269,3 +269,87 @@ test("Skilled prefills recognized skills and flags an unavailable tool without i
   assert.deepEqual(partial.data, { chosen: ["skills:ani", "skills:ath"] });
   assert.deepEqual(partial.missing, ["Bowls"]);
 });
+
+test("ranger feature languages and expertise stay scoped; unsupported language is reported", async () => {
+  const input = { classes: [{ definition: { name: "Ranger", classFeatures: [{ id: 70, name: "Deft Explorer", requiredLevel: 2 }] },
+    classFeatures: [{ definition: { id: 70, name: "Deft Explorer", requiredLevel: 2 } }] }], modifiers: {
+    class: [{ componentId: 70, type: "language", friendlySubtypeName: "Vedalken" },
+      { componentId: 70, type: "language", friendlySubtypeName: "Common Sign Language" },
+      { componentId: 70, type: "expertise", friendlySubtypeName: "Perception" },
+      { componentId: 71, type: "proficiency", friendlySubtypeName: "Survival" }],
+    race: [{ type: "language", friendlySubtypeName: "Giant" }]
+  }};
+  const languages = choices([{ value: "languages:standard:sign", label: "Common Sign Language" }, { value: "languages:standard:giant", label: "Giant" }]);
+  const advancement = { type: "Trait", title: "Deft Explorer", item: { type: "class", name: "Ranger" }, configuration: { mode: "default" },
+    unfulfilledChoices: async () => ({ available: [{ type: "choice", choices: languages }, { type: "choice", choices: languages }], choices: languages }) };
+  const context = { character: input };
+  assert.equal(await selectAdvancement({ advancement, level: 2 }, context), null);
+  const partial = await prefillTraitSelection({ advancement, level: 2 }, context);
+  assert.deepEqual(partial.data.chosen, ["languages:standard:sign"]);
+  assert.deepEqual(partial.missing, ["Vedalken"]);
+  const skills = choices([{ value: "skills:prc", label: "Perception" }, { value: "skills:sur", label: "Survival" }]);
+  advancement.configuration.mode = "upgrade";
+  advancement.unfulfilledChoices = async () => ({ available: [{ type: "choice", choices: skills }], choices: skills });
+  assert.deepEqual(await selectAdvancement({ advancement, level: 2 }, context), { chosen: ["skills:prc"] });
+});
+
+test("Skilled partial choices ignore native options outside its slot pools", async () => {
+  const input = { classes: [], feats: [{ definition: { id: 80, name: "Skilled" } }], modifiers: { feat: [
+    { componentId: 80, type: "proficiency", friendlySubtypeName: "Sleight of Hand" },
+    { componentId: 80, type: "proficiency", friendlySubtypeName: "Shawm" },
+    { componentId: 80, type: "proficiency", friendlySubtypeName: "Birdpipes" }
+  ] }};
+  const pool = choices([{ value: "skills:slt", label: "Sleight of Hand" }, { value: "tool:music:shawm", label: "Shawm" }]);
+  const all = choices([...pool.asOptions(), { value: "other:birdpipes", label: "Birdpipes" }]);
+  const advancement = { type: "Trait", item: { type: "feat", name: "Skilled" }, actor: { system: { details: { level: 3 } } }, configuration: { mode: "default" },
+    unfulfilledChoices: async () => ({ available: Array.from({ length: 3 }, () => ({ type: "choice", choices: pool })), choices: all }) };
+  const partial = await prefillTraitSelection({ advancement, level: 0 }, { character: input });
+  assert.deepEqual(partial.data.chosen, ["skills:slt", "tool:music:shawm"]);
+  assert.deepEqual(partial.missing, ["Birdpipes"]);
+});
+
+test('Reborn resistance chooses the matching damage trait without treating it as a proficiency',async()=>{
+ const pool=choices([{value:'dr:cold',label:'Cold'},{value:'dr:necrotic',label:'Necrotic'},{value:'dr:poison',label:'Poison'}]);
+ const advancement={configuration:{mode:'default'},unfulfilledChoices:async()=>({available:[{type:'choice',choices:pool}],choices:pool})};
+ const scope={modifiers:[{type:'resistance',friendlySubtypeName:'Cold',subType:'cold'}]};
+ assert.deepEqual(await traitSelection(advancement,scope),{chosen:['dr:cold']});
+ const skills=choices([{value:'skills:cold',label:'Cold'}]);
+ advancement.unfulfilledChoices=async()=>({available:[{type:'choice',choices:skills}],choices:skills});
+ assert.equal(await traitSelection(advancement,scope),null);
+});
+
+test('Harper Fiddle is reported when absent rather than substituted with Viol',async()=>{
+ const input={classes:[],feats:[{definition:{id:10,name:'Harper Agent'}}],modifiers:{feat:[{componentId:10,type:'proficiency',friendlySubtypeName:'Fiddle'}]}};
+ const instruments=choices([{value:'tool:music:viol',label:'Viol'},{value:'tool:music:flute',label:'Flute'}]);
+ const advancement={type:'Trait',item:{type:'feat',name:'Harper Agent'},actor:{system:{details:{level:3}}},configuration:{mode:'default'},unfulfilledChoices:async()=>({available:[{type:'choice',choices:instruments}],choices:instruments})};
+ const partial=await prefillTraitSelection({advancement,level:0},{character:input});
+ assert.equal(partial.data,null);
+ assert.deepEqual(partial.missing,['Fiddle']);
+});
+
+test('Druid reconciles JSON Nature when Guide has already granted the class selection Survival',async()=>{
+ const oldConfig=globalThis.CONFIG;
+ globalThis.CONFIG={DND5E:{skills:{sur:{label:'Survival'}}}};
+ try{
+ const input={classes:[{definition:{name:'Druid',classFeatures:[{id:10,name:'Core Traits',requiredLevel:1}]}}],modifiers:{class:[{componentId:10,type:'proficiency',friendlySubtypeName:'Survival'},{componentId:10,type:'proficiency',friendlySubtypeName:'Perception'}],background:[{type:'proficiency',friendlySubtypeName:'Nature'}],race:[{type:'proficiency',friendlySubtypeName:'Insight'}]}};
+ const pool=choices([{value:'skills:prc',label:'Perception'},{value:'skills:nat',label:'Nature'},{value:'skills:med',label:'Medicine'}]);
+ const advancement={type:'Trait',item:{type:'class',name:'Druid'},actor:{items:[{type:'background'}],system:{skills:{sur:{value:1}}}},configuration:{mode:'default'},unfulfilledChoices:async()=>({available:[{type:'choice',choices:pool},{type:'choice',choices:pool}],choices:pool})};
+ assert.deepEqual(await selectAdvancement({advancement,level:1},{character:input}),{chosen:['skills:nat','skills:prc']});
+ input.modifiers.background.push({type:'proficiency',friendlySubtypeName:'Medicine'});
+ assert.equal(await selectAdvancement({advancement,level:1},{character:input}),null);
+ advancement.actor.system.skills.sur.value=0;
+ input.modifiers.background.pop();
+ assert.equal(await selectAdvancement({advancement,level:1},{character:input}),null);
+ }finally{globalThis.CONFIG=oldConfig;}
+});
+
+
+test('numbered Weapon Mastery feats include Longbow at level four without offering it at level one',async()=>{
+ const input={classes:[],feats:[{definition:{id:10,name:'Weapon Mastery'}},{definition:{id:20,name:'4: Weapon Mastery'}}],modifiers:{feat:[]},choices:{feat:[{componentId:10,componentTypeId:1,type:3,optionValue:100},{componentId:10,componentTypeId:1,type:3,optionValue:101},{componentId:10,componentTypeId:1,type:3,optionValue:102},{componentId:20,componentTypeId:1,type:3,optionValue:103}],choiceDefinitions:[{id:'1-3',options:[{id:100,label:'Halberd (Cleave)'},{id:101,label:'Handaxe (Vex)'},{id:102,label:'Dagger (Nick)'},{id:103,label:'Longbow (Slow)'}]}]}};
+ assert.deepEqual(characterMasteryNames(input,1),['Halberd','Handaxe','Dagger']);
+ assert.deepEqual(characterMasteryNames(input,4),['Halberd','Handaxe','Dagger','Longbow']);
+ const pool=choices([{value:'weapon:mar:longbow',label:'Longbow'},{value:'weapon:mar:longsword',label:'Longsword'}]);
+ const advancement={level:4,configuration:{mode:'mastery'},unfulfilledChoices:async()=>({available:[{type:'choice',choices:pool}],choices:pool})};
+ assert.deepEqual(await traitSelection(advancement,{modifiers:[]},input),{chosen:['weapon:mar:longbow']});
+});
+

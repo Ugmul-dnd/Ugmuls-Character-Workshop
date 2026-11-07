@@ -1,0 +1,7 @@
+node_modules/
+.cf/
+.cloudflare/
+.wrangler/
+.env*
+.dev.vars*
+coverage/

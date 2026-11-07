@@ -1,0 +1,10 @@
+.ucw-wizard [hidden] { display: none !important; }
+.ucw-wizard nav { display: flex; flex-wrap: wrap; gap: .4rem; padding-bottom: .8rem; margin-bottom: 1rem; border-bottom: 1px solid var(--color-border-light-primary, #777); }
+.ucw-wizard nav button { flex: 1 1 120px; }
+.ucw-wizard nav [aria-current="step"] { font-weight: bold; border-bottom: 3px solid var(--color-text-hyperlink, #b67f30); }
+.ucw-wizard footer { display: flex; gap: .5rem; margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--color-border-light-primary, #777); }
+.ucw-wizard footer button { flex: 1; }
+.ucw-wizard fieldset { padding: .8rem; }
+.ucw-wizard input:not([type="checkbox"]), .ucw-wizard textarea, .ucw-wizard select { width: 100%; }
+.ucw-wizard p, .ucw-wizard li { line-height: 1.5; overflow-wrap: anywhere; }
+.ucw-wizard details { margin: .8rem 0; }

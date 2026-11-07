@@ -1,0 +1,22 @@
+{
+  "name": "ugmuls-ddb-public-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone public D&D Beyond character retrieval Worker; no Foundry conversion or authentication.",
+  "scripts": {
+    "test": "node --test test/worker.test.mjs test/http.test.mjs",
+    "dev": "cf dev",
+    "build": "cf build",
+    "test:runtime": "node --test test/runtime.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.12",
+    "cf": "1.0.0-beta.28",
+    "miniflare": "5.20261104.0-beta",
+    "vite": "8.3.6"
+  }
+}

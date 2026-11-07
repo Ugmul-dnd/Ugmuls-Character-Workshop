@@ -1,4 +1,4 @@
-import { selectAdvancement, describeSelection, prefillTraitSelection } from "./advancement-choices.mjs";
+import { selectAdvancement, describeSelection, prefillTraitSelection, prefillSpellSelection } from "./advancement-choices.mjs";
 import { canonicalItemUuid } from "./compendium-matcher.mjs";
 
 const MODULE_ID = "ugmuls-character-workshop";
@@ -18,12 +18,13 @@ export function baseActorData(character, userId) {
 /** Freeze selected source identities before creating any world documents. */
 export async function prepareActorPlan(character, preview, resolve) {
   if (!preview?.rows?.length) throw new Error("Find and select source matches first.");
-  const unresolved = preview.rows.filter(row => !row.selectedUuid);
+  const unresolved = preview.rows.filter(row => !row.selectedUuid && (!row.skip || row.type === "class"));
   if (unresolved.length) throw new Error(`Select sources before creating: ${unresolved.map(row => row.name || row.label).join(", ")}.`);
   const tasks = [];
   const seen = new Set();
   let totalLevels = 0;
   for (const row of preview.rows) {
+    if (!row.selectedUuid && row.skip && row.type !== "class") continue;
     if (seen.has(row.selectedUuid)) throw new Error("The same source was selected for more than one origin.");
     seen.add(row.selectedUuid);
     const entry = preview.entries.find(entry => entry.uuid === row.selectedUuid && entry.type === row.type);
@@ -48,7 +49,8 @@ export async function prepareActorPlan(character, preview, resolve) {
   }
   // Starting class controls first-level proficiencies and hit points.
   classes.sort((a, b) => Number(b.starting) - Number(a.starting));
-  return [...classes, ...tasks.filter(task => task.type === "background"),
+  // Background skills must exist before class expertise steps (e.g. Scholar).
+  return [...tasks.filter(task => task.type === "background"), ...classes,
     ...tasks.filter(task => task.type === "race"), ...tasks.filter(task => task.type === "subclass")];
 }
 
@@ -83,7 +85,8 @@ export function runAdvancement(manager, hooks = globalThis.Hooks, choices = null
         let reason = choices.report.get(key)?.kind === "manual" ? choices.report.get(key).detail : "No unique compatible JSON selection; complete the native prompt.";
         try { data = await selectAdvancement(this, choices); }
         catch (error) { reason = `Needs review: ${error.message}`; }
-        let kind = data && advancement.type === "HitPoints" ? "default"
+        let kind = data && (advancement.type === "HitPoints" || (advancement.type === "ItemChoice"
+          && data.selected?.length === 0 && advancement.configuration.choices[this.level]?.replacement)) ? "default"
           : data && advancement.type === "Size" && advancement.configuration.sizes.size === 1 ? "source" : "json";
         if (!data) {
           // Size's native helper can default a multi-size choice; require an explicit JSON match.
@@ -91,11 +94,13 @@ export function runAdvancement(manager, hooks = globalThis.Hooks, choices = null
           kind = data === false ? "manual" : "source";
           if (data === false) {
             try {
-              const partial = await prefillTraitSelection(this, choices);
-              if (partial) {
+              const partial = await prefillTraitSelection(this, choices) ?? await prefillSpellSelection(this, choices);
+              if (partial?.data) {
                 const names = await describeSelection(this, partial.data, choices);
                 await advancement.apply(this.level, partial.data, { automatic: true });
                 reason = `Pre-filled ${names}. Review remaining JSON choice${partial.missing.length === 1 ? "" : "s"}: ${partial.missing.join(", ") || "not specified in JSON"}.`;
+              } else if (partial?.missing?.length) {
+                reason = `JSON selections unavailable in this native choice: ${partial.missing.join(", ")}. Complete the native prompt; no replacement was invented.`;
               }
             } catch (error) { reason = `Needs review: ${error.message}`; }
           }
@@ -149,7 +154,7 @@ export async function applyNativeSource(actor, task, choices = null) {
 }
 
 /** Session remains attached to the window so retries continue the same draft. */
-export async function buildActor(session, { createActor, applySource, applyFeats, applyLoadout, progress = () => {} }) {
+export async function buildActor(session, { createActor, applySource, applyFeats, applyLoadout, applyReview, progress = () => {} }) {
   if (session.busy) throw new Error("Character creation is already running.");
   if (session.complete) return session.actor;
   session.busy = true;
@@ -178,6 +183,11 @@ export async function buildActor(session, { createActor, applySource, applyFeats
       progress("Importing selected equipment and spells; retaining native grants.");
       await applyLoadout(session.actor);
       session.loadoutComplete = true;
+    }
+    if (applyReview && !session.reviewComplete) {
+      progress("Creating review placeholders and saving the import log.");
+      await applyReview(session.actor);
+      session.reviewComplete = true;
     }
     await session.actor.setFlag(MODULE_ID, "importState.status", applyLoadout ? "complete" : "origins-complete");
     session.complete = true;

@@ -1,6 +1,32 @@
 const normalize = value => String(value ?? "").normalize("NFKC").toLowerCase()
   .replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
 
+export function speciesMatchNames(character) {
+  const race = character.race;
+  const base = race?.baseRaceName ?? race?.fullName;
+  if (race?.isLegacy || !["elf", "tiefling"].includes(normalize(base))) return [];
+  const traitIds = new Set((race?.racialTraits ?? []).filter(Boolean).map(entry => entry.definition ?? entry)
+    .filter(trait => /^(Elven Lineage|Fiendish Legacy)$/i.test(trait.name)).map(trait => trait.id));
+  const selected = (character.options?.race ?? []).filter(option => traitIds.has(option?.componentId)
+    && (character.choices?.race ?? []).some(choice => choice?.componentId === option.componentId && choice.optionValue === option.definition?.id));
+  const lineages = new Set(selected.map(option => {
+    const name = normalize(option.definition?.name);
+    const allowed = normalize(base) === "elf" ? ["high", "wood", "drow"] : ["abyssal", "chthonic", "infernal"];
+    return allowed.find(lineage => [lineage, `${lineage} ${base}`, `${lineage} lineage`, `${lineage} legacy`, `${lineage} ${base} lineage`].some(alias => normalize(alias) === name));
+  }).filter(Boolean));
+  if (lineages.size !== 1) return [];
+  const lineage = [...lineages][0];
+  return [`${base}, ${lineage}`, `${lineage} ${base}`];
+}
+
+export function featSourceNames(name) {
+  return /^Magic Initiate \((Wizard|Cleric|Druid)\)$/i.test(name ?? "") ? [name, "Magic Initiate"] : [name];
+}
+
+export function featureSourceNames(name) {
+  return normalize(name) === "enchanting conversationalist" ? [name, "Enchanting Conversation"] : [name];
+}
+
 /** Foundry accepts shortened UUIDs, but source pools use the explicit Item segment. */
 export function canonicalItemUuid(uuid) {
   if (typeof uuid !== "string") return uuid;
@@ -19,7 +45,7 @@ export function characterOrigins(character) {
       definition: cls.subclassDefinition });
   }
   rows.push({ key: "species", type: "race", label: "Species",
-    name: character.race?.fullName ?? character.race?.baseRaceName ?? "", definition: character.race });
+    name: character.race?.fullName ?? character.race?.baseRaceName ?? "", matchNames: speciesMatchNames(character), definition: character.race });
   const background = character.background;
   rows.push({ key: "background", type: "background", label: "Background",
     name: background?.hasCustomBackground ? background.customBackground?.name ?? "Custom background"
@@ -65,8 +91,9 @@ export async function indexOriginPacks(packs) {
 
 export function matchOrigins(origins, entries) {
   return origins.map(origin => {
+    const names = origin.matchNames?.length ? origin.matchNames : [origin.name];
     const candidates = origin.name ? entries.filter(entry => entry.type === origin.type
-      && normalize(entry.name) === normalize(origin.name)) : [];
+      && names.some(name => normalize(entry.name) === normalize(name))) : [];
     return { ...origin, candidates, selectedUuid: candidates.length === 1 ? candidates[0].uuid : null,
       status: candidates.length > 1 ? "ambiguous" : candidates.length === 1 ? "review" : "missing" };
   });

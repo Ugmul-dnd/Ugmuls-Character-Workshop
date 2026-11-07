@@ -204,3 +204,9 @@ test("native source addition preserves the compendium data and requests JSON cla
     delete globalThis.CONFIG;
   }
 });
+
+test('background proficiency grants precede class expertise advancements',async()=>{
+ const rows=[{key:'class-0',type:'class',name:'Wizard',selectedUuid:'wizard',level:3},{key:'background',type:'background',name:'Sage',selectedUuid:'sage'}];
+ const plan=await prepareActorPlan({classes:[{isStartingClass:true}]},{rows,entries:rows.map(r=>({type:r.type,uuid:r.selectedUuid}))},async uuid=>({type:uuid==='sage'?'background':'class',name:uuid,system:{}}));
+ assert.deepEqual(plan.map(t=>t.type),['background','class']);
+});

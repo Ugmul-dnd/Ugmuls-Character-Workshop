@@ -1,4 +1,5 @@
 const SERVICE_ORIGIN = "https://character-service.dndbeyond.com";
+export const PUBLIC_CHARACTER_SERVICE = "https://ugmuls-ddb-public-proxy.anthony-e-colbert.workers.dev";
 
 /** Accept a character number or a URL on the supplied character-service endpoint. */
 export function parseCharacterId(input) {
@@ -52,19 +53,28 @@ export async function loadCharacter(input, { fetchImpl = globalThis.fetch, timeo
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(characterServiceUrl(id), {
+    const response = await fetchImpl(`${PUBLIC_CHARACTER_SERVICE}/v1/characters/${id}`, {
       headers: { Accept: "application/json" },
       credentials: "omit",
+      redirect: "error",
+      cache: "no-store",
       signal: controller.signal
     });
     if (!response.ok) {
-      throw new Error(`D&D Beyond returned HTTP ${response.status}. Check that the character is publicly accessible, or use a JSON file.`);
+      const message = response.status === 404 ? "The character is unavailable. Check its number and make it public on D&D Beyond."
+        : response.status === 429 ? "The shared character service is busy. Wait a minute before retrying."
+        : response.status === 504 ? "D&D Beyond character loading timed out. Try again."
+        : `The character service could not load this character (HTTP ${response.status}). Try again later.`;
+      throw new Error(`${message} You can also use a JSON file or paste JSON.`);
+    }
+    if (!/^application\/(?:json|[a-z0-9.+-]+\+json)(?:\s*;|$)/i.test(response.headers.get("Content-Type") ?? "")) {
+      throw new Error("The character service returned an unexpected response. Try again or use manual JSON import.");
     }
     return readCharacterJson(await response.json(), id);
   } catch (error) {
     if (controller.signal.aborted) throw new Error("D&D Beyond character loading timed out. Try again or use a JSON file.");
     if (error instanceof TypeError) {
-      throw new Error("Could not reach D&D Beyond. Browser access or the network may be blocking the request. Open the character-service URL and save its JSON for file import.");
+      throw new Error("Could not reach the public character service. Check your connection, try again, or use a JSON file or paste JSON.");
     }
     throw error;
   } finally {

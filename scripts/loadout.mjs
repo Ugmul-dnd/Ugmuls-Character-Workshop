@@ -1,10 +1,18 @@
-import { canonicalItemUuid } from "./compendium-matcher.mjs";
+import { canonicalItemUuid, featSourceNames } from "./compendium-matcher.mjs";
 
 const ID = "ugmuls-character-workshop";
 export const PHYSICAL_TYPES = ["weapon", "equipment", "consumable", "tool", "loot", "container"];
 const records = value => Array.isArray(value) ? value.filter(Boolean) : [];
 const nameKey = value => String(value ?? "").normalize("NFKC").toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
 const abilities = ["", "str", "dex", "con", "int", "wis", "cha"];
+
+/** DDB's learned-spell casters leave prepared=false even for ready spells. */
+export function usesKnownSpellReadiness(definition) {
+  return definition?.spellPrepareType === null && definition.spellCastingLearningStyle === 1
+    && definition.knowsAllSpells === false
+    && Array.isArray(definition.spellRules?.levelPreparedSpellMaxes)
+    && definition.spellRules.levelPreparedSpellMaxes.length === 0;
+}
 
 export function characterLoadout(character) {
   const rows = [];
@@ -33,9 +41,13 @@ export function characterLoadout(character) {
     const row = spells.get(key) ?? { key, kind: "spell", label: "Spell", types: ["spell"], name: definition.name,
       level: definition.level, origin, classIndex, sourceIds: [], prepared: false, alwaysPrepared: false,
       ability: abilities[spell.spellCastingAbilityId] ?? "", notes: "" };
-    row.prepared ||= Boolean(spell.prepared);
+    const knownReady = origin === "class" && spell.countsAsKnownSpell === true
+      && usesKnownSpellReadiness(character.classes[classIndex]?.definition);
+    row.knownCasterReady ||= knownReady;
+    row.countsAsKnownSpell ||= spell.countsAsKnownSpell === true;
+    row.prepared ||= Boolean(spell.prepared) || knownReady;
     row.alwaysPrepared ||= Boolean(spell.alwaysPrepared);
-    row.notes = `${origin === "class" ? "Class spell" : "Feature/item spell — native grant retained when present"}; level ${definition.level ?? "?"}; ${row.alwaysPrepared ? "always prepared" : row.prepared ? "prepared" : "unprepared"}`;
+    row.notes = `${origin === "class" ? "Class spell" : "Feature/item spell — native grant retained when present"}; level ${definition.level ?? "?"}; ${row.alwaysPrepared || definition.level === 0 ? "always prepared" : row.knownCasterReady ? "known class spell — ready to cast" : row.prepared ? "prepared" : "unprepared"}`;
     spells.set(key, row);
   }
   for (const group of records(character.classSpells)) {
@@ -56,10 +68,15 @@ export function characterLoadout(character) {
 export function matchLoadout(rows, entries) {
   return rows.map(row => {
     if (row.nativeOnly) return { ...row, candidates: [], selectedUuid: null, status: "native" };
-    const candidates = entries.filter(entry => row.types.includes(entry.type) && nameKey(entry.name) === nameKey(row.name)
+    const exact = entries.filter(entry => nameKey(entry.name) === nameKey(row.name));
+    const names = !exact.some(entry => row.types.includes(entry.type))
+      ? row.invocation ? [row.name, ...(row.matchNames ?? [])] : row.kind === "feat" ? featSourceNames(row.name) : [row.name]
+      : [row.name];
+    const candidates = entries.filter(entry => row.types.includes(entry.type) && names.some(name => nameKey(entry.name) === nameKey(name))
       && (row.kind !== "spell" || row.level === undefined || entry.level === row.level));
-    return { ...row, candidates, selectedUuid: candidates.length === 1 ? candidates[0].uuid : null,
-      status: candidates.length === 0 ? "missing" : candidates.length === 1 ? "review" : "ambiguous" };
+    const autoSelect = candidates.length === 1 || (row.kind === "equipment" && candidates.length > 0);
+    return { ...row, candidates, selectedUuid: autoSelect ? candidates[0].uuid : null,
+      status: candidates.length === 0 ? "missing" : autoSelect ? "review" : "ambiguous" };
   });
 }
 

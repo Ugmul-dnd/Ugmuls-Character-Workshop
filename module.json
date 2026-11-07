@@ -8,5 +8,6 @@
   "relationships": {
     "systems": [{ "id": "dnd5e", "type": "system", "compatibility": { "minimum": "6.0.6" } }]
   },
-  "esmodules": ["scripts/main.js"]
+  "esmodules": ["scripts/main.js"],
+  "styles": ["styles/workshop.css"]
 }

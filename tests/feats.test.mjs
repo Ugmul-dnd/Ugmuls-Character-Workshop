@@ -128,3 +128,13 @@ test("extra feats use native addition, unresolved class choices do not become bo
   assert.equal(await importFeats(actor, [extra], { character, report, applySource: async () => true }), true);
   assert.equal(report.get(extra.key).status, "imported");
 });
+
+test("DDB disguise entries are visible as reference information but never feat import candidates", async () => {
+  const hidden = { definition: { id: 90, name: "Hidden Entry", categories: [{ tagName: "__DISGUISE_FEAT" }, { tagName: "__DISPLAY_WITH_DATA_ORIGIN" }] } };
+  const input = { ...character, feats: [...character.feats, hidden] };
+  assert.equal(characterFeats(input).some(row => row.definitionId === 90), false);
+  const { jsonSelectionInventory } = await import("../scripts/advancement-choices.mjs");
+  const rows = jsonSelectionInventory(input);
+  assert.ok(rows.find(row => row.label.startsWith("Hidden D&D Beyond")).values.includes("Hidden Entry"));
+  assert.equal(rows.find(row => row.label === "Recorded feats").values.includes("Hidden Entry"), false);
+});
