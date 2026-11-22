@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — Development
+
+- Move Create Player, wizard continuation, filtered sheet compendium browsing, batch spell selection, and missing class spell loading into Character Workshop. Existing wizard progress and world preferences carry forward.
+
 ## 0.2.0 — Beta
 
 - Import public D&D Beyond characters by number or URL, or use saved/pasted JSON.

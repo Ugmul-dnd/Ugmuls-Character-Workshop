@@ -1,6 +1,9 @@
 import { characterServiceUrl, loadCharacter, readCharacterJson } from "./ddb-source.mjs";
 import { CharacterSourceWindow, openSourceWindow } from "./source-window.js";
 
+import { registerPlayerCreator } from "./create-player.js";
+import { registerSheetTools } from "./sheet-compendium-browser.js";
+
 const MODULE_ID = "ugmuls-character-workshop";
 
 Hooks.on("renderActorDirectory", (_app, html) => {
@@ -27,6 +30,11 @@ Hooks.on("renderActorDirectory", (_app, html) => {
 });
 
 Hooks.once("init", () => {
+  // Let legacy Automation own its controls until both modules have been upgraded.
+  const automation = game.modules.get("ugmuls-5-5e-automation");
+  const legacyScripts = automation?.active ? Array.from(automation.esmodules ?? []) : [];
+  if (!legacyScripts.some(path => String(path).endsWith("/create-player.js"))) registerPlayerCreator();
+  if (!legacyScripts.some(path => String(path).endsWith("/sheet-compendium-browser.js"))) registerSheetTools();
   game.settings.registerMenu(MODULE_ID, "loadCharacterJson", {
     name: "D&D Beyond Character JSON",
     label: "Load Character JSON",

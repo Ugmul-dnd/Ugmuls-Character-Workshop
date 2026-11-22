@@ -1,10 +1,14 @@
 # Ugmuls Character Workshop
 
-**v0.2.0 · Beta**
+**v0.2.1 · Beta**
 
 Bring a public D&D Beyond character into Foundry VTT without rebuilding it by hand.
 
 Ugmuls Character Workshop reads your character's exported choices and builds a new Foundry character using your world's approved, accessible compendium sources. It is designed to complement **Ugmul's 5.5e Automation**, but can be used independently.
+
+## Character creation and sheets
+
+Use **Create Player** in Actors to build a level-one character. Resume from the character’s directory menu. Sheet Add Item and Add Spell controls open filtered compendiums on standard and Tidy sheets. Select multiple spells or load missing unprepared class spells for eligible casters. Configure both sheet options under Character Workshop in Foundry settings.
 
 ## What it does
 
