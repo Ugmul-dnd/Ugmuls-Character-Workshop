@@ -1,31 +1,23 @@
-# v0.2.0 — Beta
+# v0.2.1 — Beta
 
-**Import a public D&D Beyond character using the compendium content already available in your Foundry world.**
+Character Workshop now includes **Create Player**, a guided builder for creating a level-one character from your installed compendium sources, alongside the existing D&D Beyond importer.
 
-Ugmuls Character Workshop is a companion to **Ugmul's 5.5e Automation** that helps get characters into Foundry without rebuilding them by hand. It can also be used independently.
+## New in this release
 
-## Included in this beta
+- Create Player is now part of Character Workshop, moved from Ugmul's 5.5e Automation.
+- Resume an unfinished character from its Actors directory menu. Existing builder progress and world preferences carry forward.
+- Add Item and Add Spell controls open filtered compendium browsing on standard and Tidy character sheets.
+- Select multiple spells, or load missing unprepared class spells for eligible casters.
+- Configure the sheet tools in Character Workshop's module settings.
 
-- Public character loading by number or URL, plus file/paste JSON import.
-- Source matching for classes, subclasses, species, backgrounds, feats, equipment, and spells.
-- Compendium search and replacement selection for content without a direct match.
-- Native advancement assistance with manual prompts where needed.
-- Supported spell selections and preparation, proficiency alignment, and local character artwork.
-- A final review log comparing ability scores, proficiencies, and tools with the export.
-- Revised-rule class/subclass source priority, with legacy and Tasha's content available as fallbacks.
+The module remains independently usable. Source books are not included; users need access to the relevant installed compendiums.
 
-## Before you use it
+## D&D Beyond importer
 
-This is a **beta, one-time import tool**, not a guarantee of a finished or fully automated character. Review the completed sheet and log before play. Some choices and differences between source books still need GM attention.
+The importer remains a **beta, one-time import** intended to get a character ready for play in Foundry. Review missing matches, replacements, and the final sheet and import findings before play. Future character changes take place in Foundry; this is not ongoing synchronization with D&D Beyond.
 
-The importer does **not** implement new gameplay automation for features, skills, or weapons. It contains no built-in macros or automation for unknown D&D Beyond content. Existing source activities and effects are preserved. An unresolved entry may become a name-only placeholder labeled **Needs GM Review**, for the GM to create or modify afterward.
+Unknown content may receive a name-only **Needs GM Review** placeholder. The module does not create new gameplay automation or macros for unknown features, skills, or weapons.
 
-This release creates new actors; it does not update or synchronize existing characters. Direct proficiency alignment may not retain every original advancement link. Legacy subclasses are not converted to revised rules.
+## Requirements
 
-## Requirements and getting started
-
-Requires **Foundry VTT v14**, **D&D5e 6.0.6 or later**, and access to the compendium sources you want to use. Source books are not included. File upload permission is needed for local portraits.
-
-Enable the module and open **Actors → Import D&D Beyond**. Load your public character, review missing entries, run the builder, and check **Sheet & log**. Keep the window open if you pause and want to continue the same draft.
-
-See the [README](README.md) for installation and usage instructions. Report issues on [GitHub](https://github.com/Ugmul-dnd/Ugmuls-Character-Workshop/issues).
+Foundry VTT v14 and D&D5e 6.0.6 or later. Install the module using the release's module.json manifest, enable it in your world, and use **Actors → Create Player** or **Import D&D Beyond**.

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 — Development
+## 0.2.1 — Beta
 
 - Move Create Player, wizard continuation, filtered sheet compendium browsing, batch spell selection, and missing class spell loading into Character Workshop. Existing wizard progress and world preferences carry forward.
 
