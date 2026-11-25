@@ -3,3 +3,5 @@
 .rsa-pc-prepared{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}.rsa-pc-prepared label{display:flex;gap:.4rem;align-items:center}.rsa-pc-prepared input{flex:none}
 
 .rsa-add-spells .window-content{padding:1rem;gap:.8rem}.rsa-add-spells .dialog-content p{line-height:1.45;margin:0 0 .8rem}.rsa-add-spells .dialog-content label{display:flex;flex-direction:column;gap:.4rem}.rsa-add-spells .dialog-content select{width:100%}.rsa-add-spells .form-footer{display:flex;flex-direction:column;gap:.6rem}.rsa-add-spells .form-footer button{width:100%;flex:none;min-height:40px;margin:0}
+
+.ucw-proficiency-review table{width:100%;text-align:left}.ucw-proficiency-review td,.ucw-proficiency-review th{padding:.5rem;vertical-align:top}.ucw-proficiency-overlap{background:rgba(210,145,35,.18);border-left:4px solid #b57920}.ucw-proficiency-window .window-content{overflow:auto;padding:1rem}

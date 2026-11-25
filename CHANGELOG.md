@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Recognize a current proficiency's fixed advancement grant as a connected source even when the native advancement has no saved choice receipt. Keep missing receipts visible without falsely flagging the proficiency as unconnected.
+- Fix starting-equipment previews and tool selections losing their source UUID after a compendium document loads. Equipment browser filters now index stored IDs while selection validation retains full source identity.
+- Open the selected proficiency advancement directly when changing review choices, automatically restoring unrelated saved choices through the native advancement manager.
+- Add Skills & Tools review to guided setup and the owned character sheet menu, with native source-choice editing.
+- Compare current sheet skill/tool proficiencies with class, background, species, subclass, and feat advancement records. Highlight overlaps and proficiencies without a connected record; distinguish expertise and partial proficiency. Inspection does not change the character.
+
 ## 0.2.1 — Beta
 
 - Move Create Player, wizard continuation, filtered sheet compendium browsing, batch spell selection, and missing class spell loading into Character Workshop. Existing wizard progress and world preferences carry forward.

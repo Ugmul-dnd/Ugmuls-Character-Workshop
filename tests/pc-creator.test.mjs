@@ -60,8 +60,32 @@ chosen=luteCandidate.uuid;await api.PlayerCreationWizard.prototype.pickGear.call
 console.log('Equipment browser filters: Artisan/Music/Game tools, specific tools, weapon/armor categories, native focus properties, incomplete import metadata, isolated filter state, actual picker integration, cancellation and invalid-choice rejection pass.');
 // Native locked result filters hide invalid rows instead of only locking them.
 const holyCandidates=['amulet','emblem','reliquary'].map(id=>({uuid:'Compendium.phb.equipment.Item.'+id,system:{type:{value:'trinket'},properties:['foc']}}));
-const holyOptions=api.equipmentBrowserOptions({type:'focus',key:'holy'},holyCandidates);assert.deepEqual(holyOptions.filters.initial.additional.properties,{foc:1});assert.deepEqual(holyOptions.filters.locked.arbitrary,[{k:'uuid',o:'in',v:holyCandidates.map(item=>item.uuid)}]);
-const sameIdDifferentPack={...holyCandidates[0],uuid:'Compendium.other.equipment.Item.amulet'};assert.equal(holyOptions.filters.locked.arbitrary[0].v.includes(sameIdDifferentPack.uuid),false,'Matching IDs in unrelated packs are not made selectable');
-assert.deepEqual(api.equipmentBrowserOptions({type:'tool',key:'music'},[luteCandidate]).filters.locked.arbitrary[0].v,[luteCandidate.uuid]);
+const holyOptions=api.equipmentBrowserOptions({type:'focus',key:'holy'},holyCandidates);assert.deepEqual(holyOptions.filters.initial.additional.properties,{foc:1});assert.deepEqual(holyOptions.filters.locked.arbitrary,[{k:'_id',o:'in',v:holyCandidates.map(item=>item.uuid.split('.').at(-1))}]);
+const sameIdDifferentPack={...holyCandidates[0],uuid:'Compendium.other.equipment.Item.amulet'};assert.equal(holyOptions.filters.locked.arbitrary[0].k,'_id','Only stored IDs may become browser index fields');
+assert.deepEqual(api.equipmentBrowserOptions({type:'tool',key:'music'},[luteCandidate]).filters.locked.arbitrary[0].v,[luteCandidate.uuid.split('.').at(-1)]);
 const deduped=api.equipmentBrowserOptions({type:'focus',key:'holy'},[...holyCandidates,holyCandidates[0]]);assert.equal(deduped.filters.locked.arbitrary[0].v.length,3);
 console.log('Equipment result filtering: eligible Holy Focus choices only, Focus property retained, full UUID/source isolation, instruments and deduplicated allowed sets pass.');
+
+// Reproduce v14's indexDocument behavior: requested top-level fields are read
+// from _source over the generated { _id, uuid }. UUID is absent from _source.
+const artisan={_id:'cartographer',uuid:'Compendium.book.Item.cartographer',name:'Cartographer Tools',type:'tool',system:{type:{value:'art'},source:{book:'Test Book'}}};
+const artisanEntry={_id:'artisan-choice',type:'tool',key:'art'};
+let previewIndex,previewLoaded=false;
+dnd5e.applications.CompendiumBrowser={
+ async fetch(){return [artisan];},
+ async selectOne(options){
+  const indexedFields=options.filters.locked.arbitrary.map(filter=>filter.k);
+  const source={_id:artisan._id,name:artisan.name,type:artisan.type,system:artisan.system};
+  previewIndex={_id:source._id,uuid:artisan.uuid};
+  for(const field of indexedFields)previewIndex[field]=source[field];
+  previewLoaded=true;
+  assert.equal(previewIndex.uuid,artisan.uuid,'Preview loading must preserve the generated UUID');
+  assert.equal(options.prerequisites.validate(previewIndex).get('equipment').valid,true);
+  assert.equal(options.prerequisites.validate({...previewIndex,uuid:'Compendium.other.Item.cartographer'}).get('equipment').valid,false,'Same item ID in another pack is not authorized');
+  return previewIndex.uuid;
+ }
+};
+const artisanWizard={actor:{itemTypes:{background:[{system:{startingEquipment:[artisanEntry]}}]}},progress:{equipment:{background:{picks:{}}}},doc:async uuid=>uuid===artisan.uuid?artisan:null};
+await api.PlayerCreationWizard.prototype.pickGear.call(artisanWizard,{kind:'background',gear:artisanEntry._id,slot:0});
+assert.equal(previewLoaded,true);assert.equal(artisanWizard.progress.equipment.background.picks['artisan-choice:0'],artisan.uuid,'Selection remains recorded after loading its preview');
+console.log('Artisan tool preview regression passes: cached UUID retained, selection recorded, reused IDs from other packs rejected.');

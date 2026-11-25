@@ -3,6 +3,7 @@ import { CharacterSourceWindow, openSourceWindow } from "./source-window.js";
 
 import { registerPlayerCreator } from "./create-player.js";
 import { registerSheetTools } from "./sheet-compendium-browser.js";
+import { registerProficiencyReview } from "./proficiency-review.mjs";
 
 const MODULE_ID = "ugmuls-character-workshop";
 
@@ -30,6 +31,7 @@ Hooks.on("renderActorDirectory", (_app, html) => {
 });
 
 Hooks.once("init", () => {
+  registerProficiencyReview();
   // Let legacy Automation own its controls until both modules have been upgraded.
   const automation = game.modules.get("ugmuls-5-5e-automation");
   const legacyScripts = automation?.active ? Array.from(automation.esmodules ?? []) : [];

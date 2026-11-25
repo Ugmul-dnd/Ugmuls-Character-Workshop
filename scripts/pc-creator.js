@@ -47,11 +47,12 @@ export function equipmentBrowserOptions(entry,candidates=[]){
     }
     if(entry.type==='focus'&&candidates.length&&candidates.every(item=>Array.from(item.system?.properties??[]).includes('foc')))additional.properties={foc:1};
     const locked={documentClass:'Item',types:new Set(types)};
-    // Native prerequisites disable invalid rows but do not remove them. Limit
-    // the fetched results to the validated UUIDs as well, so Holy Focus shows
-    // its actual choices instead of every focus with red prerequisite locks.
-    // UUIDs preserve source identity when different packs reuse an item ID.
-    if(candidates.length)locked.arbitrary=[{k:'uuid',o:'in',v:[...new Set(candidates.map(item=>item.uuid))]}];
+    // Browser filter keys become compendium index fields. UUID is derived:
+    // indexing it overwrites the generated UUID when a preview loads a document
+    // (Foundry v14), breaking later previews, source labels, and selection.
+    // Narrow by stored ID; prerequisites and the final UUID check below retain
+    // source identity if another enabled pack reuses one of those IDs.
+    if(candidates.length)locked.arbitrary=[{k:'_id',o:'in',v:[...new Set(candidates.map(item=>item._id??item.id??item.uuid.split('.').at(-1)))]}];
     return {tab:'physical',filters:{locked,initial:{documentClass:'Item',types:new Set(types),additional}},selection:{min:1,max:1}};
 }
 export async function addNativeOrigin(actor,source){
@@ -119,6 +120,7 @@ export class PlayerCreationWizard extends foundry.applications.api.ApplicationV2
         }else if(step===5){body='<p>Choose class and background equipment separately. Items, container contents, quantities, and included coins come from the selected book entries.</p>';for(const type of ["class","background"])body+=await this.equipmentHTML(type);
         }else if(step===6){body=this.spellsHTML();
         }else{body='<h3>'+escape(this.actor.name)+'</h3><ul>'+["class","background","race"].map(type=>'<li>'+kinds[type].label+': '+escape(this.actor.itemTypes?.[type]?.[0]?.name??"Missing")+'</li>').join("")+'</ul><p>Ability scores: '+ABILITIES.map(key=>key.toUpperCase()+' '+this.actor.system.abilities[key].value).join(" · ")+'</p><p>Starting equipment choices have been applied. Review your inventory, spell selections, and any remaining class choices on the character sheet. Portrait and token art can be added manually.</p>';}
+        if(step===7)body+=(await import('./proficiency-review.mjs')).proficiencyReviewHTML(this.actor);
         return '<div class="rsa-pc-layout"><nav aria-label="Creation progress">'+steps.map((name,i)=>'<span class="'+(i===step?'active':'')+'">'+(i+1)+'. '+name+'</span>').join("")+'</nav><section><h2>'+steps[step]+'</h2>'+(this.progress.resumeReview?'<p>Checked your character sheet against saved setup. Continue from the first unfinished step, or use Back to review earlier steps.</p>':'')+body+'<p class="rsa-pc-error" role="alert"></p></section><footer><button type="button" data-close>Save &amp; Close</button>'+(this.actor?'<button type="button" data-sheet>Open Sheet</button>':'')+(step>0?'<button type="button" data-back>Back</button>':'')+'<button type="button" data-next>'+(step===7?'Finish':'Continue')+'</button></footer></div>';
     }
 
@@ -185,6 +187,7 @@ export class PlayerCreationWizard extends foundry.applications.api.ApplicationV2
             if(action==='library'){await preloadClassSpells(this.actor);this.progress.spells??={};this.progress.spells.libraryLoaded=true;}
             if(action==='prepare')await choosePreparedClassSpells(this.actor);
         }));
+        if(this.progress.step===7)import('./proficiency-review.mjs').then(api=>api.bindProficiencyReview(root,this.actor,()=>this.render({force:true})));
         if(this.busy)for(const control of root.querySelectorAll('button,input,select'))control.disabled=true;
     }
     readScores(){for(const key of ABILITIES){const select=this.element.querySelector('[name="score-'+key+'"]');if(select)this.progress.scores[key]=select.value===""?"":Number(select.value);}}
