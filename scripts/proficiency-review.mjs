@@ -30,7 +30,7 @@ export function proficiencyReview(actor) {
         if (!rows.has(rowKey)) rows.set(rowKey, {key, category, sources: []});
         rows.get(rowKey).sources.push({itemId:item.id, advancementId:advancement.id ?? advancement._id,
           name:item === origin ? item.name : `${origin.name} → ${item.name}`, level:Number(advancement.level ?? 0), recorded:chosen.has(key),
-          editable:chosen.has(key) && (!grants.has(key) || config.allowReplacements === true), fixed:grants.has(key)});
+          editable:chosen.has(key) && (!grants.has(key) || config.allowReplacements === true), fixed:grants.has(key), repairable:mode === "default" && grants.has(key) && !config.allowReplacements});
       }
     }
   }
@@ -52,7 +52,8 @@ export function proficiencyReview(actor) {
     const values = row.key.startsWith("skills:") ? actor.system?.skills : actor.system?.tools;
     const value = Number(values?.[row.key.split(":").at(-1)]?.value ?? 0);
     const current = row.current ?? (row.category === "expertise" ? value >= 2 : row.category === "proficiency" ? value >= 1 : false);
-    return {...row, current, duplicate:row.sources.length > 1,
+    return {...row, current, sources:row.sources.map(source=>({...source,
+      editable:source.editable || (!current && source.repairable)})), missingFixed:!current && row.sources.some(source=>source.repairable), duplicate:row.sources.length > 1,
       // A fixed grant identifies its source without a choice receipt. Native
       // advancements may omit that receipt when proficiency already existed.
       // Keep recorded separate so the UI never claims a missing receipt exists.
@@ -77,8 +78,8 @@ function label(key) {
 export function proficiencyReviewHTML(actor) {
   const {rows, notices} = proficiencyReview(actor);
   return '<div class="ucw-proficiency-review"><h3>Skills &amp; Tool Proficiencies</h3><p>Current sheet proficiencies checked against class, background, species, subclass, and feat advancements. Highlighted entries show overlaps or a current proficiency without a recorded source. Expertise is reviewed separately.</p>'
-    + '<p>Change choices opens the selected proficiency step in Foundry’s native editor. Other saved choices are restored automatically. Complete it, then refresh this review. If a saved choice needs attention, Foundry may show that step too.</p>'
-    + (rows.length ? '<table><thead><tr><th>Proficiency</th><th>Sources</th><th>Review</th></tr></thead><tbody>' + rows.map(row => '<tr class="'+(row.duplicate||row.unconnected?'ucw-proficiency-overlap':'')+'"><td>'+escape(label(row.key))+'<br><small>'+escape(row.category)+(row.current?' · On sheet':' · Source record only')+'</small></td><td>'+(row.sources.length?'':'No recorded source')+row.sources.map(source => escape(source.name)+' — '+(source.fixed?'fixed grant':'selected')+(source.recorded?'':source.fixed?' (no saved receipt)':' (not recorded as applied)')).join('<br>')+'</td><td>'+(row.unconnected?'<strong>No connected source — review</strong><br>':'')+(row.duplicate?'<strong>Overlap — review</strong>':row.unconnected?'':row.current?'Source connected':'Not currently on sheet')+row.sources.filter(source=>source.editable).map(source=>'<br><button type="button" data-proficiency-item="'+escape(source.itemId)+'" data-proficiency-advancement="'+escape(source.advancementId)+'">Change '+escape(source.name)+' choices</button>').join('')+'</td></tr>').join('')+'</tbody></table>' : '<p>No recorded skill or tool grants found.</p>')
+    + '<p>Change choices opens the selected proficiency step in Foundry’s native editor. Other saved choices are restored automatically, and missing fixed skill/tool grants are reapplied before saving. Complete it, then refresh this review. If a saved choice needs attention, Foundry may show that step too.</p>'
+    + (rows.length ? '<table><thead><tr><th>Proficiency</th><th>Sources</th><th>Review</th></tr></thead><tbody>' + rows.map(row => '<tr class="'+(row.duplicate||row.unconnected||row.missingFixed?'ucw-proficiency-overlap':'')+'"><td>'+escape(label(row.key))+'<br><small>'+escape(row.category)+(row.current?' · On sheet':' · Source record only')+'</small></td><td>'+(row.sources.length?'':'No recorded source')+row.sources.map(source => escape(source.name)+' — '+(source.fixed?'fixed grant':'selected')+(source.recorded?'':source.fixed?' (no saved receipt)':' (not recorded as applied)')).join('<br>')+'</td><td>'+(row.unconnected?'<strong>No connected source — review</strong><br>':'')+(row.duplicate?'<strong>Overlap — review</strong>':row.unconnected?'':row.current?'Source connected':'Not currently on sheet')+row.sources.filter(source=>source.editable).map(source=>'<br><button type="button" data-proficiency-item="'+escape(source.itemId)+'" data-proficiency-advancement="'+escape(source.advancementId)+'">'+(!row.current&&source.repairable?'Restore '+escape(source.name)+' grant':'Change '+escape(source.name)+' choices')+'</button>').join('')+'</td></tr>').join('')+'</tbody></table>' : '<p>No recorded skill or tool grants found.</p>')
     + notices.map(notice=>'<p>'+escape(notice)+'</p>').join('')
     + '<p>“Source connected” means a saved choice or fixed advancement grant matches the current proficiency. A fixed grant can identify the source even without a saved receipt. “No connected source” means neither was found; direct sheet edits, imports, or effects may explain it. Review these manually; nothing is changed automatically.</p><button type="button" data-proficiency-refresh>Refresh review</button></div>';
 }
@@ -91,8 +92,44 @@ export function editProficiencyChoices(actor, itemId, advancementId) {
   const manager = dnd5e.applications.advancement.AdvancementManager.forModifyChoices(actor, itemId, source.level);
   if (!manager.steps.length) throw Error("No native choices are available for this source.");
   focusProficiencyStep(manager, itemId, advancementId, source.level);
+  appendFixedGrantRepairs(manager);
   manager.render(true);
   return manager;
+}
+
+/** Replay only missing, unconditional fixed skill/tool grants at the end of
+ * the native clone transaction. Compute missing keys at execution time: a
+ * class reversal can remove proficiency that another source skipped earlier.
+ * Native restore records the receipt; completion commits everything together.
+ */
+export function appendFixedGrantRepairs(manager) {
+  const Manager = dnd5e.applications.advancement.AdvancementManager;
+  const seen = new Set();
+  for (const row of proficiencyReview(manager.clone).rows) {
+    if (row.category !== "proficiency") continue;
+    for (const source of row.sources) {
+      if (!source.fixed) continue;
+      const id = `${source.itemId}.${source.advancementId}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const item = manager.clone.items.get(source.itemId);
+      const advancement = item?.advancement?.byId?.[source.advancementId];
+      // Replacement-enabled grants may have been intentionally traded away.
+      if (!advancement || advancement.configuration.allowReplacements || !advancement.appliesToClass) continue;
+      const flow = Manager.flowsForLevel(item, source.level).find(flow=>flow.advancement.id === source.advancementId);
+      if (!flow) continue;
+      Object.defineProperty(flow, "retainedData", {configurable:true, get() {
+        const chosen = list(advancement.configuration.grants).filter(key=> {
+          if (!/^(skills|tool):/.test(key) || key.includes("*")) return false;
+          const path = dnd5e.documents.Trait.changeKeyPath(key);
+          const value = path?.split('.').reduce((data, part)=>data?.[part], manager.clone);
+          return Number(value ?? 0) < 1;
+        });
+        return {chosen};
+      }});
+      manager.steps.push({type:"restore",flow,automatic:true});
+    }
+  }
 }
 
 /** Keep native reversal, retained data, validation, and final commit intact.

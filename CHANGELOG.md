@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Restore missing unconditional fixed skill/tool grants inside the native choice-edit transaction after resolving overlaps. Add a Restore grant action for missing fixed proficiencies; preserve expertise and intentionally replaceable grants.
 - Recognize a current proficiency's fixed advancement grant as a connected source even when the native advancement has no saved choice receipt. Keep missing receipts visible without falsely flagging the proficiency as unconnected.
 - Fix starting-equipment previews and tool selections losing their source UUID after a compendium document loads. Equipment browser filters now index stored IDs while selection validation retains full source identity.
 - Open the selected proficiency advancement directly when changing review choices, automatically restoring unrelated saved choices through the native advancement manager.

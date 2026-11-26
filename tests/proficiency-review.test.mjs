@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {proficiencyReview,proficiencyReviewHTML,editProficiencyChoices,focusProficiencyStep,registerProficiencyReview} from '../scripts/proficiency-review.mjs';
+import {proficiencyReview,proficiencyReviewHTML,editProficiencyChoices,focusProficiencyStep,appendFixedGrantRepairs,registerProficiencyReview} from '../scripts/proficiency-review.mjs';
 const trait=(id,chosen,grants=[],mode='default',extra={})=>({id,type:'Trait',level:1,value:{chosen:new Set(chosen)},configuration:{grants:new Set(grants),mode,...extra}});
 const item=(id,type,traits)=>({id,name:id,type,system:{levels:1},advancement:{byType:{Trait:traits}}});
 const actor={documentName:'Actor',type:'character',isOwner:true,items:[item('class','class',[trait('class-choice',['skills:arc'])]),item('background','background',[trait('background-grant',[],['skills:arc'])]),item('species','race',[trait('expertise',['skills:arc'],[],'expertise')])]};
@@ -18,7 +18,7 @@ test('render resolves native tool metadata through the system and only localizes
 test('overlap includes unapplied fixed grants while keeping expertise separate; inspection is read only',()=>{
  const before=structuredClone(actor),report=proficiencyReview(actor);
  assert.equal(report.rows.length,2);assert.equal(report.rows[0].duplicate,true);assert.equal(report.rows[1].duplicate,false);
- assert.equal(report.rows[0].sources[0].editable,true);assert.equal(report.rows[0].sources[1].editable,false);assert.equal(report.rows[0].sources[1].recorded,false);
+ assert.equal(report.rows[0].sources[0].editable,true);assert.equal(report.rows[0].sources[1].editable,true);assert.equal(report.rows[0].sources[1].recorded,false);
  assert.deepEqual(actor,before);
 });
 test('sheet scan flags unconnected proficiencies and expertise after scanning standalone feats',()=>{
@@ -53,6 +53,8 @@ test('background Stealth remains connected after changing overlapping class prof
  assert.equal(missing.unconnected,true,'Expertise alone does not explain the base proficiency');
  const absent=proficiencyReview({...pc,system:{skills:{ste:{value:0}}}}).rows.find(row=>row.key==='skills:ste'&&row.category==='proficiency');
  assert.equal(absent.current,false,'Fixed source must not imply proficiency is actually on the sheet');
+ assert.equal(absent.missingFixed,true);assert.equal(absent.sources[0].editable,true);
+ assert.match(proficiencyReviewHTML({...pc,system:{skills:{ste:{value:0}}}}),/Restore House Thuranni Heir grant/);
 });
 test('tools, future levels, upgrade modes and missing receipts remain distinct',()=>{
  const future=trait('future',['tool:music:lute']);future.level=3;
@@ -67,12 +69,32 @@ test('granted features stay attributed through native parent relationships; cycl
 });
 test('edits validate ownership and current native receipts before opening the level editor',()=>{
  globalThis.game={settings:{get:()=>false}};let args;
- const manager={steps:[{type:'forward',flow:{item:{id:'class'},advancement:{id:'class-choice'},level:1}}],render(value){assert.equal(value,true);}};
+ const manager={clone:{items:[]},steps:[{type:'forward',flow:{item:{id:'class'},advancement:{id:'class-choice'},level:1}}],render(value){assert.equal(value,true);}};
  globalThis.dnd5e={applications:{advancement:{AdvancementManager:{forModifyChoices(...values){args=values;return manager;}}}}};
  assert.throws(()=>editProficiencyChoices({...actor,isOwner:false},'class','class-choice'),/own/);
- assert.throws(()=>editProficiencyChoices(actor,'background','background-grant'),/no longer editable/);
+ assert.throws(()=>editProficiencyChoices(actor,'background','missing-advancement'),/no longer editable/);
  assert.equal(editProficiencyChoices(actor,'class','class-choice'),manager);assert.deepEqual(args,[actor,'class',1]);
  game.settings.get=()=>true;assert.throws(()=>editProficiencyChoices(actor,'class','class-choice'),/Enable/);
+});
+test('native transaction repairs skipped fixed grants after class reversal without downgrading expertise or restoring replacements',async()=>{
+ const fixed=trait('fixed',[],['skills:acr','skills:ath','tool:art:cartographer','skills:*']);fixed.appliesToClass=true;
+ const replaced=trait('replaced',['skills:his'],['skills:ste'],'default',{allowReplacements:true});replaced.appliesToClass=true;
+ const background=item('background','background',[fixed,replaced]);background.advancement.byId={fixed,replaced};
+ const items=[background];items.get=id=>items.find(item=>item.id===id);
+ const clone={items,system:{skills:{acr:{value:1},ath:{value:2}},tools:{}}},manager={clone,steps:[]};
+ const path=key=>`system.${key.startsWith('skills:')?'skills':'tools'}.${key.split(':').at(-1)}.value`;
+ const read=key=>path(key).split('.').reduce((data,part)=>data?.[part],clone);
+ globalThis.dnd5e={documents:{Trait:{changeKeyPath:path}},applications:{advancement:{AdvancementManager:{flowsForLevel(item,level){return item.advancement.byType.Trait.map(advancement=>({item,advancement,level}));}}}}};
+ fixed.restore=async(level,data)=>{for(const key of data.chosen){const field=key.startsWith('skills:')?'skills':'tools',id=key.split(':').at(-1);clone.system[field][id]??={};clone.system[field][id].value=1;fixed.value.chosen.add(key);}};
+ appendFixedGrantRepairs(manager);
+ assert.equal(manager.steps.length,1);assert.equal(read('tool:art:cartographer'),undefined,'Preparing the review transaction must not apply anything');
+ clone.system.skills.acr.value=0; // Native class reversal clears its former selection.
+ const step=manager.steps[0];assert.equal(step.type,'restore');assert.equal(step.automatic,true);
+ await step.flow.advancement.restore(step.flow.level,step.flow.retainedData);
+ assert.equal(read('skills:acr'),1);assert.equal(read('skills:ath'),2,'Existing expertise must not be downgraded');assert.equal(read('tool:art:cartographer'),1);
+ assert.deepEqual([...fixed.value.chosen],['skills:acr','tool:art:cartographer']);assert.deepEqual(step.flow.retainedData,{chosen:[]},'Replay is idempotent');
+ assert.equal(read('skills:ste'),undefined,'Intentionally replaced grants must stay replaced');
+ const repaired=proficiencyReview(clone).rows.find(row=>row.key==='skills:acr');assert.equal(repaired.current,true);assert.equal(repaired.sources[0].recorded,true);
 });
 test('targeted editing keeps native undo and restores unrelated choices before and after the selected step',()=>{
  const flow=id=>({item:{id:'class'},advancement:{id},level:1,retainedData:{chosen:[id]}});
